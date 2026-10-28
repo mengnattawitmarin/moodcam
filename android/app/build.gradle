@@ -8,7 +8,7 @@ android {
         minSdk 29
         targetSdk 35
         versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1') as Integer)
-        versionName "3.0." + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
+        versionName "4.0." + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
     }
     signingConfigs {
         // Test-only key kept in the repo so every build can be installed over the previous one.

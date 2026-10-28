@@ -1,13 +1,13 @@
 {
-  "name": "MoodCam — Film Camera",
-  "short_name": "MoodCam",
-  "description": "Film camera & photo editor: cinematic looks, AI beauty, social frames.",
+  "name": "MoonCam — Film Camera",
+  "short_name": "MoonCam",
+  "description": "กล้องฟิล์มและแต่งรูประดับโปร ฟรี ประมวลผลบนเครื่อง",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#0b0c0a",
-  "theme_color": "#0b0c0a",
+  "background_color": "#050506",
+  "theme_color": "#050506",
   "lang": "th",
   "icons": [
     {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},

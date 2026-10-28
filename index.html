@@ -2,860 +2,191 @@
 <html lang="th">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0b0c0a">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#050506">
+<title>MoonCam</title>
+<meta name="description" content="MoonCam — กล้องฟิล์มและแต่งรูประดับโปร ฟรี ประมวลผลบนเครื่อง">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-<meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="MoodCam">
-<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<meta name="apple-mobile-web-app-title" content="MoonCam">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Noto+Sans+Thai:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="css/app.css?v=4">
 </head>
 <body>
-<title>MoodCam</title>
-<meta name="claude:viewport-fit-sides" content="cover">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
-<style>
-/* Layout: a dark film-camera app shell — photo stage on top (left on desktop), tool deck below (right on desktop). Single deliberate dark look. */
-:root{
-  --bg:#0b0c0a; --panel:#151713; --panel2:#1d1f1a; --line:#2f312a;
-  --gold:#d89a36; --gold-soft:#e8c78d; --cream:#f1e8d8; --muted:#a9a497; --dim:#6e6a60; --red:#e5484d;
-  --f-brand:"Cormorant Garamond", "Times New Roman", serif;
-  --f-ui:"IBM Plex Sans Thai", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --f-num:"IBM Plex Mono", ui-monospace, Menlo, monospace;
-  color-scheme:dark;
-}
-html,body{height:100%}
-body{background:var(--bg);color:var(--cream);font-family:var(--f-ui);font-size:14px;-webkit-tap-highlight-color:transparent}
-*{box-sizing:border-box}
-button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
-button:focus-visible,input:focus-visible,label:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-.app{height:100%;display:grid;grid-template-rows:auto minmax(0,1fr) auto;max-width:1280px;margin:0 auto;
-  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:8px}
-header{display:flex;align-items:center;gap:10px;padding-block:6px 10px}
-.brand{flex:1;min-width:0;line-height:1}
-.brand b{display:block;font-family:var(--f-brand);font-weight:600;font-size:26px;letter-spacing:.06em;color:var(--gold)}
-.brand small{font-size:9px;letter-spacing:.3em;color:var(--gold-soft)}
-.hbtn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border:1px solid var(--line);border-radius:6px;background:var(--panel);font-size:13px;white-space:nowrap}
-.hbtn.primary{background:var(--gold);border-color:var(--gold);color:#1a1205;font-weight:600}
-.hbtn svg{width:16px;height:16px}
-input[type=file]{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-flash" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="i-timer" viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9 2h6"/></symbol>
+  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></symbol>
+  <symbol id="i-center" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></symbol>
+  <symbol id="i-ratio" viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="2"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="i-flip" viewBox="0 0 24 24"><path d="M4 7h12l-3-3M20 17H8l3 3"/><circle cx="12" cy="12" r="2.5"/></symbol>
+  <symbol id="i-album" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m3 16 5-5 4 4 3-3 6 6"/><circle cx="16" cy="9" r="1.5"/></symbol>
+  <symbol id="i-pro" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  <symbol id="i-lens" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v5M21 12h-5M12 21v-5M3 12h5"/></symbol>
+  <symbol id="i-looks" viewBox="0 0 24 24"><circle cx="9" cy="9" r="6"/><circle cx="15" cy="15" r="6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
+  <symbol id="i-redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h3"/></symbol>
+  <symbol id="i-compare" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 2v20"/></symbol>
+  <symbol id="i-adjust" viewBox="0 0 24 24"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M2 14h4M10 8h4M18 16h4"/></symbol>
+  <symbol id="i-face" viewBox="0 0 24 24"><path d="M12 3c4 0 7 3 7 8 0 5-3 10-7 10s-7-5-7-10c0-5 3-8 7-8z"/><path d="M9.5 11h.01M14.5 11h.01M9.5 15.5c1.4 1 3.6 1 5 0"/></symbol>
+  <symbol id="i-lips" viewBox="0 0 24 24"><path d="M3 12c3-4 6-5 9-3 3-2 6-1 9 3-3 4-6 6-9 6s-6-2-9-6z"/><path d="M3 12h18"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></symbol>
+  <symbol id="i-social" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><path d="M17.5 6.5h.01"/></symbol>
+  <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 3v13M7 8l5-5 5 5"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></symbol>
+  <symbol id="i-dice" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 8h.01M16 8h.01M12 12h.01M8 16h.01M16 16h.01"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><path d="M12 3 4 7l8 4 8-4z"/><path d="m4 12 8 4 8-4M4 17l8 4 8-4"/></symbol>
+  <symbol id="i-qr" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></symbol>
+  <symbol id="i-roll" viewBox="0 0 24 24"><rect x="4" y="5" width="12" height="14" rx="2"/><path d="M16 8h4v8h-4M7 5v14M13 5v14"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-12a7 7 0 0 0-14 0c0 5.8 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></symbol>
+  <symbol id="i-chip" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><rect x="3" y="7" width="13" height="13" rx="2"/><path d="M8 4h11a2 2 0 0 1 2 2v11"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v13M7 11l5 5 5-5M5 21h14"/></symbol>
+</svg>
 
-.main{display:grid;grid-template-rows:minmax(0,1fr) auto;gap:10px;min-height:0}
-@media (min-width:900px){.main{grid-template-columns:minmax(0,1fr) 380px;grid-template-rows:minmax(0,1fr)}}
-.stage{position:relative;min-height:220px;background:#000;border-radius:8px;overflow:hidden;display:grid;place-items:center;touch-action:none}
-[hidden]{display:none!important}
-.stage canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block}
-.stage .tag{position:absolute;left:10px;top:10px;font:500 10px var(--f-num);letter-spacing:.08em;background:rgba(11,12,10,.7);padding:4px 8px;border-radius:4px;color:var(--gold-soft)}
-.stage .hint{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);font-size:11px;color:var(--muted);background:rgba(11,12,10,.7);padding:3px 10px;border-radius:20px;white-space:nowrap}
-.stage .tools{position:absolute;right:10px;top:10px;display:flex;gap:6px}
-.chipbtn{height:30px;padding:0 10px;border-radius:4px;background:rgba(11,12,10,.72);border:1px solid var(--line);font-size:12px;display:inline-flex;align-items:center;gap:5px}
-.chipbtn[disabled]{opacity:.35;cursor:default}
-.chipbtn.on{border-color:var(--gold);color:var(--gold)}
-.busy{position:absolute;inset:0;display:grid;place-items:center;background:rgba(11,12,10,.6);font-size:13px}
-
-.deck{background:var(--panel);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;min-height:0;max-height:46vh}
-@media (min-width:900px){.deck{max-height:none}}
-.tabs{display:flex;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
-.tabs button{flex:1;min-width:max-content;padding:12px 12px 10px;font-size:11px;letter-spacing:.12em;color:var(--muted);border-bottom:2px solid transparent}
-.tabs button[aria-selected=true]{color:var(--gold);border-color:var(--gold);font-weight:600}
-.panel{overflow-y:auto;padding:12px 14px 16px;min-height:0}
-.sub{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
-.chip{height:30px;padding:0 12px;border-radius:4px;background:var(--panel2);border:1px solid var(--line);font-size:12px}
-.chip.on{background:var(--gold);border-color:var(--gold);color:#1a1205;font-weight:600}
-
-.looks{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px}
-.look{position:relative;aspect-ratio:3/4;border-radius:6px;overflow:hidden;border:1px solid var(--line);background:var(--panel2);padding:0}
-.look canvas{width:100%;height:100%;object-fit:cover;display:block}
-.look span{position:absolute;inset:auto 0 0;padding:14px 6px 5px;font-size:11px;text-align:left;background:linear-gradient(transparent,rgba(0,0,0,.75))}
-.look.on{border:2px solid var(--gold)}
-.look .del{position:absolute;right:4px;top:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.6);font-size:12px;line-height:20px}
-.group-label{font-size:10px;letter-spacing:.16em;color:var(--muted);margin:14px 0 8px}
-.group-label:first-child{margin-top:0}
-
-.row{display:grid;grid-template-columns:96px minmax(0,1fr) 46px;align-items:center;gap:8px;min-height:34px}
-.row label{font-size:13px}
-.row output{font:12px var(--f-num);color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
-input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:24px;background:transparent;--track:linear-gradient(90deg,var(--line),var(--line))}
-input[type=range]::-webkit-slider-runnable-track{height:3px;border-radius:2px;background:var(--track)}
-input[type=range]::-moz-range-track{height:3px;border-radius:2px;background:var(--track)}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--cream);margin-top:-6px;box-shadow:0 0 0 1px rgba(0,0,0,.4)}
-input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:var(--cream);border:0}
-.toggle{display:flex;align-items:center;justify-content:space-between;min-height:40px}
-.switch{width:42px;height:24px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);position:relative}
-.switch::after{content:"";position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:var(--muted);transition:transform .15s}
-.switch[aria-checked=true]{background:var(--gold);border-color:var(--gold)}
-.switch[aria-checked=true]::after{transform:translateX(18px);background:#fff}
-.bands{display:flex;gap:10px;margin-bottom:8px;flex-wrap:wrap}
-.band{width:28px;height:28px;border-radius:50%;border:2px solid transparent}
-.band.on{border-color:var(--cream)}
-
-.aitools{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:12px}
-.aitool{display:flex;flex-direction:column;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
-.aitool i{width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--panel2);display:grid;place-items:center;font-style:normal;font-size:17px;color:var(--cream)}
-.aitool.on{color:var(--gold)} .aitool.on i{border-color:var(--gold);color:var(--gold);background:rgba(216,154,54,.12)}
-.note{font-size:12px;color:var(--dim);line-height:1.55;margin-top:10px}
-.swatches{display:flex;gap:8px;flex-wrap:wrap}
-.sw{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;color:var(--muted)}
-.sw b{width:44px;height:44px;border-radius:6px;border:1px solid var(--line);display:grid;place-items:center;font-weight:500;font-size:10px;color:var(--muted)}
-.sw.on{color:var(--gold)} .sw.on b{border:2px solid var(--gold)}
-.text{width:100%;height:40px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--cream);padding:0 12px;font:inherit}
-.bigbtn{width:100%;height:46px;border-radius:6px;background:var(--gold);color:#1a1205;font-weight:600;letter-spacing:.08em;margin-top:12px}
-.bigbtn.ghost{background:var(--panel2);color:var(--cream);border:1px solid var(--line)}
-.footer{display:flex;gap:8px;align-items:center;padding-top:10px}
-.footer .sp{flex:1}
-.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--panel2);border:1px solid var(--gold);padding:10px 16px;border-radius:8px;font-size:13px;z-index:50;max-width:90vw}
-.sheet{position:fixed;inset:0;background:rgba(0,0,0,.85);display:grid;place-items:center;z-index:40;padding:20px}
-.sheet img{max-width:100%;max-height:70vh;border-radius:6px}
-.sheet p{text-align:center;color:var(--muted);font-size:13px}
-/* live camera */
-.camsheet{position:fixed;inset:0;z-index:30;background:#000;display:grid;grid-template-rows:auto minmax(0,1fr) auto auto;
-  padding:env(safe-area-inset-top,0px) max(12px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(12px,env(safe-area-inset-left,0px))}
-.camtop{display:flex;align-items:center;gap:6px;padding-block:10px}
-.camtop .brand b{font-size:20px}
-.vf{position:relative;overflow:hidden;border-radius:8px;background:#000;touch-action:none}
-.vf video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.vf.front video{transform:scaleX(-1)}
-.vf .vig,.vf .gridov,.vf .flash{position:absolute;inset:0;pointer-events:none}
-.vf .gridov{background:
-  linear-gradient(90deg,transparent calc(33.33% - .5px),rgba(255,255,255,.3) calc(33.33% - .5px),rgba(255,255,255,.3) calc(33.33% + .5px),transparent calc(33.33% + .5px),transparent calc(66.66% - .5px),rgba(255,255,255,.3) calc(66.66% - .5px),rgba(255,255,255,.3) calc(66.66% + .5px),transparent calc(66.66% + .5px)),
-  linear-gradient(transparent calc(33.33% - .5px),rgba(255,255,255,.3) calc(33.33% - .5px),rgba(255,255,255,.3) calc(33.33% + .5px),transparent calc(33.33% + .5px),transparent calc(66.66% - .5px),rgba(255,255,255,.3) calc(66.66% - .5px),rgba(255,255,255,.3) calc(66.66% + .5px),transparent calc(66.66% + .5px))}
-.vf .flash{background:#fff;opacity:0;transition:opacity .25s}
-.vf .count{position:absolute;inset:0;display:grid;place-items:center;font:600 96px var(--f-brand);color:var(--cream);text-shadow:0 2px 12px rgba(0,0,0,.5)}
-.vf .camtag{position:absolute;left:10px;bottom:10px;font:500 10px var(--f-num);letter-spacing:.08em;background:rgba(11,12,10,.7);padding:4px 8px;border-radius:4px;color:var(--gold-soft)}
-.vf .zoom{position:absolute;right:10px;bottom:10px;display:flex;gap:4px}
-.camlooks{display:flex;gap:6px;overflow-x:auto;padding-block:10px;scrollbar-width:none}
-.camlooks .chip{flex:none}
-.cambar{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding-block:4px 14px}
-.shutter{width:76px;height:76px;border-radius:50%;border:3px solid var(--cream);display:grid;place-items:center}
-.shutter::after{content:"";width:60px;height:60px;border-radius:50%;background:var(--cream);transition:transform .1s}
-.shutter:active::after{transform:scale(.9)}
-.roundbtn{width:52px;height:52px;border-radius:50%;background:var(--panel2);border:1px solid var(--line);display:grid;place-items:center;justify-self:end}
-.roundbtn svg{width:22px;height:22px}
-.camthumb{width:52px;height:52px;border-radius:8px;border:1px solid var(--line);background:var(--panel2) center/cover no-repeat}
-@media (prefers-reduced-motion:reduce){*{transition:none!important}}
-</style>
-
-<div class="app">
-  <header>
-    <div class="brand"><b>MOODCAM</b><small id="edition">FILM EDITOR · WEB · v3</small></div>
-    <button class="hbtn" id="install" hidden>ติดตั้งแอป</button>
-    <button class="hbtn primary" id="shoot" title="เปิดกล้อง">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>ถ่ายรูป</button>
-    <label class="hbtn" for="pick">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg>เลือกรูป</label>
-    <input id="cam" type="file" accept="image/*" capture="environment">
-    <input id="pick" type="file" accept="image/*">
-  </header>
-
-  <div class="main">
-    <div class="stage" id="stage">
-      <canvas id="view" aria-label="ภาพที่แต่งแล้ว"></canvas>
-      <div class="tag" id="tag">SAMPLE · ORIGINAL</div>
-      <div class="tools">
-        <button class="chipbtn" id="undo" title="ย้อนกลับ" disabled>↶</button>
-        <button class="chipbtn" id="redo" title="ทำซ้ำ" disabled>↷</button>
-        <button class="chipbtn" id="compare" title="กดค้างเพื่อดูต้นฉบับ">ต้นฉบับ</button>
-      </div>
-      <div class="hint" id="hint" hidden>ลากที่รูปเพื่อเลื่อนตำแหน่งครอป</div>
-      <div class="busy" id="busy" hidden>กำลังเรนเดอร์…</div>
-    </div>
-
-    <section class="deck">
-      <div class="tabs" role="tablist" id="tabs">
-        <button role="tab" data-tab="looks" aria-selected="true">LOOKS</button>
-        <button role="tab" data-tab="adjust" aria-selected="false">ADJUST</button>
-        <button role="tab" data-tab="ai" aria-selected="false">AI BEAUTY</button>
-        <button role="tab" data-tab="social" aria-selected="false">SOCIAL</button>
-        <button role="tab" data-tab="save" aria-selected="false">SAVE</button>
-      </div>
-      <div class="panel" id="panel"></div>
-    </section>
-  </div>
-</div>
-
-<div class="camsheet" id="camsheet" hidden>
-  <div class="camtop">
-    <button class="chipbtn" id="camclose" aria-label="ปิดกล้อง">✕</button>
-    <div class="brand"><b>MOODCAM</b><small>FILM CAMERA</small></div>
-    <button class="chipbtn" id="camtorch" hidden>ไฟฉาย</button>
-    <button class="chipbtn on" id="camgrid">Grid</button>
-    <button class="chipbtn" id="camtimer">Timer</button>
-  </div>
+<!-- ================= CAMERA ================= -->
+<section class="view" id="v-cam">
   <div class="vf" id="vf">
     <video id="video" playsinline muted autoplay></video>
-    <div class="vig" id="vfvig"></div>
-    <div class="gridov" id="vfgrid"></div>
-    <div class="flash" id="vfflash"></div>
-    <div class="count" id="vfcount" hidden></div>
-    <div class="camtag" id="camtag">LIVE · ORIGINAL</div>
-    <div class="zoom" id="vfzoom" hidden></div>
+    <div class="vig" id="vf-vig"></div>
+    <div class="scan" id="vf-scan" hidden></div>
+    <div class="frame" id="vf-frame"></div>
+    <div class="grid" id="vf-grid"></div>
+    <div class="center" id="vf-center" hidden></div>
+    <div class="focus" id="vf-focus"></div>
+    <div class="flash" id="vf-flash"></div>
+    <div class="count" id="vf-count" hidden></div>
+    <div class="nocam" id="vf-nocam" hidden>
+      <div>
+        <svg class="i" style="width:44px;height:44px;color:var(--gold)"><use href="#i-moon"/></svg>
+        <p id="nocam-msg">เปิดกล้องไม่ได้</p>
+        <button class="btn-gold" id="nocam-retry">ลองอีกครั้ง</button>
+        <button class="btn-ghost" id="nocam-album" style="margin-left:6px">เลือกรูปจากอัลบั้ม</button>
+      </div>
+    </div>
   </div>
-  <div class="camlooks" id="camlooks"></div>
-  <div class="cambar">
-    <button class="camthumb" id="camthumb" aria-label="ไปหน้าแต่งรูป"></button>
-    <button class="shutter" id="shutter" aria-label="ถ่ายรูป"></button>
-    <button class="roundbtn" id="camflip" aria-label="สลับกล้องหน้า/หลัง">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><path d="M9 13a3 3 0 0 1 5-2.2M15 13a3 3 0 0 1-5 2.2"/><path d="M14 9v2h-2M10 17v-2h2"/></svg></button>
+  <div class="cam-top">
+    <div class="brand"><svg class="i moon"><use href="#i-moon"/></svg><div><b>MOONCAM</b><small id="edition">FILM · PRO · v4</small></div></div>
+    <button class="ib" id="c-flash" aria-label="แฟลช/ไฟฉาย"><svg class="i"><use href="#i-flash"/></svg></button>
+    <button class="ib" id="c-timer" aria-label="ตั้งเวลา"><svg class="i"><use href="#i-timer"/></svg></button>
+    <button class="ib" id="c-ratio" aria-label="สัดส่วนภาพ"><svg class="i"><use href="#i-ratio"/></svg></button>
+    <button class="ib on" id="c-grid" aria-label="เส้นตาราง 9 ช่อง"><svg class="i"><use href="#i-grid"/></svg></button>
+    <button class="ib" id="c-center" aria-label="จุดกึ่งกลาง"><svg class="i"><use href="#i-center"/></svg></button>
+    <button class="ib" id="c-settings" aria-label="ตั้งค่า"><svg class="i"><use href="#i-gear"/></svg></button>
+  </div>
+  <div class="cam-hud" id="cam-hud"></div>
+  <button class="pill glass roll-chip" id="roll-chip" hidden></button>
+  <div class="cam-bottom">
+    <div class="lens-row" id="lens-row"></div>
+    <div class="strength" id="cam-strength" hidden><label>ความแรง</label><input type="range" id="cam-str" min="0" max="150" value="100"><output class="num" id="cam-str-o">100%</output></div>
+    <div class="look-strip" id="cam-looks"></div>
+    <div class="modes" id="cam-modes">
+      <button data-mode="roll">ROLL</button>
+      <button data-mode="photo" class="on">PHOTO</button>
+      <button data-mode="pro">PRO</button>
+      <button data-mode="digicam">DIGICAM</button>
+    </div>
+    <div class="shutter-row">
+      <button class="album" id="c-album" aria-label="อัลบั้ม"><svg class="i"><use href="#i-album"/></svg></button>
+      <button class="shutter" id="shutter" aria-label="ถ่ายรูป"><i></i></button>
+      <div class="flip" style="display:flex;gap:8px">
+        <button class="ib glass" id="c-lenses" aria-label="เลนส์และกล้องจำลอง"><svg class="i"><use href="#i-lens"/></svg></button>
+        <button class="ib glass" id="c-flip" aria-label="สลับกล้องหน้า/หลัง"><svg class="i"><use href="#i-flip"/></svg></button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= EDITOR ================= -->
+<section class="view" id="v-edit" hidden>
+  <div class="ed-top">
+    <button class="ib" id="e-back" aria-label="กลับไปกล้อง"><svg class="i"><use href="#i-back"/></svg></button>
+    <button class="ib" id="e-album" aria-label="อัลบั้ม"><svg class="i"><use href="#i-album"/></svg></button>
+    <span class="grow"></span>
+    <button class="ib" id="e-undo" aria-label="ย้อนกลับ" disabled><svg class="i"><use href="#i-undo"/></svg></button>
+    <button class="ib" id="e-redo" aria-label="ทำซ้ำ" disabled><svg class="i"><use href="#i-redo"/></svg></button>
+    <button class="ib" id="e-compare" aria-label="กดค้างดูต้นฉบับ"><svg class="i"><use href="#i-compare"/></svg></button>
+    <button class="btn-gold" id="e-save">บันทึก</button>
+  </div>
+  <div class="stage" id="stage">
+    <canvas id="view"></canvas>
+    <span class="st-tag tag" id="st-tag">MOONCAM</span>
+    <div class="busy" id="busy" hidden>กำลังเรนเดอร์…</div>
+  </div>
+  <div class="side">
+    <div class="panel" id="panel"></div>
+    <nav class="tabs" id="tabs">
+      <button data-tab="looks" class="on"><svg class="i"><use href="#i-looks"/></svg>Looks</button>
+      <button data-tab="adjust"><svg class="i"><use href="#i-adjust"/></svg>ปรับ</button>
+      <button data-tab="beauty"><svg class="i"><use href="#i-face"/></svg>หน้าใส</button>
+      <button data-tab="makeup"><svg class="i"><use href="#i-lips"/></svg>แต่งหน้า</button>
+      <button data-tab="weather"><svg class="i"><use href="#i-sun"/></svg>อากาศ</button>
+      <button data-tab="lens"><svg class="i"><use href="#i-lens"/></svg>เลนส์</button>
+      <button data-tab="social"><svg class="i"><use href="#i-social"/></svg>โซเชียล</button>
+      <button data-tab="share"><svg class="i"><use href="#i-share"/></svg>แชร์</button>
+    </nav>
+  </div>
+</section>
+
+<!-- ================= PHOTO DUMP ================= -->
+<section class="view" id="v-dump" hidden>
+  <div class="ed-top">
+    <button class="ib" id="d-back" aria-label="กลับ"><svg class="i"><use href="#i-back"/></svg></button>
+    <div class="brand" style="margin-left:4px"><div><b style="font-size:16px">PHOTO DUMP</b><small id="d-count">0 รูป</small></div></div>
+    <span class="grow"></span>
+    <button class="btn-ghost" id="d-add">เพิ่มรูป</button>
+  </div>
+  <div class="dump-grid" id="d-grid"></div>
+  <div class="panel" id="d-panel"></div>
+</section>
+
+<!-- ================= FILM ROLL ================= -->
+<section class="view" id="v-roll" hidden>
+  <div class="ed-top">
+    <button class="ib" id="r-back" aria-label="กลับ"><svg class="i"><use href="#i-back"/></svg></button>
+    <div class="brand" style="margin-left:4px"><div><b style="font-size:16px">FILM ROLL</b><small id="r-count"></small></div></div>
+    <span class="grow"></span>
+  </div>
+  <div class="dump-grid" id="r-grid"></div>
+  <div class="panel" id="r-panel"></div>
+</section>
+
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet"><div class="grab"></div><h3><span id="sheet-title"></span><button class="ib" id="sheet-close" aria-label="ปิด" style="width:32px;height:32px"><svg class="i"><use href="#i-close"/></svg></button></h3><div class="body" id="sheet-body"></div></div>
+
+<!-- ================= PDPA CONSENT ================= -->
+<div class="overlay" id="consent" hidden>
+  <div class="inner">
+    <div class="brand"><svg class="i moon" style="width:28px;height:28px"><use href="#i-moon"/></svg></div>
+    <h1>MoonCam</h1>
+    <p>กล้องฟิล์มและแต่งรูประดับโปร ฟรีทุกฟีเจอร์ ไม่ต้องสมัครสมาชิก</p>
+    <h2>ความเป็นส่วนตัวของคุณ (PDPA)</h2>
+    <p>MoonCam ประมวลผลรูปทั้งหมด <b>บนเครื่องของคุณ</b> ไม่ส่งรูปหรือข้อมูลส่วนบุคคลขึ้นเซิร์ฟเวอร์ ไม่มีโฆษณา ไม่มีตัวติดตาม</p>
+    <div class="perm"><div class="ic"><svg class="i"><use href="#i-lens"/></svg></div><div><b>กล้อง (จำเป็น)</b><small>ใช้ถ่ายรูปและแสดงภาพสด ภาพไม่ถูกส่งออกจากเครื่อง</small></div></div>
+    <div class="perm"><div class="ic"><svg class="i"><use href="#i-album"/></svg></div><div><b>รูปภาพ (เมื่อคุณเลือก)</b><small>เปิดเฉพาะรูปที่คุณเลือกเพื่อแต่ง และบันทึกรูปลงเครื่อง</small></div></div>
+    <div class="perm"><div class="ic"><svg class="i"><use href="#i-pin"/></svg></div><div style="flex:1"><b>ตำแหน่ง (ไม่บังคับ)</b><small>ใช้ฝังหมุดจุดที่ถ่ายในไฟล์รูปและแสตมป์ชื่อสถานที่ ปิดไว้เป็นค่าเริ่มต้น เปิดภายหลังได้ในตั้งค่า</small></div>
+      <button class="sw" id="consent-gps" role="switch" aria-checked="false" aria-label="อนุญาตตำแหน่ง"></button></div>
+    <p style="margin-top:14px">คุณถอนความยินยอมและลบข้อมูลทั้งหมดในแอปได้ทุกเมื่อที่ <b>ตั้งค่า → ความเป็นส่วนตัว</b> · <a href="#" id="consent-policy" style="color:var(--gold2)">อ่านนโยบายความเป็นส่วนตัว</a></p>
+    <button class="big gold" id="consent-ok">ยอมรับและเริ่มใช้งาน</button>
   </div>
 </div>
+<div class="overlay" id="policy" hidden><div class="inner" id="policy-body"></div></div>
 
-<script>
-"use strict";
-// ======================================================================
-// Model — looks are plain parameter sets; the same engine renders preview + export
-// ======================================================================
-const ZERO_HSL = () => [0,1,2,3,4,5].map(() => ({hue:0, sat:0, lum:0}));
-const defAdj = () => ({exposure:0,contrast:0,curve:0,density:0,keepBright:0,highlights:0,shadows:0,blacks:0,temp:0,tint:0,vibrance:0,saturation:0,hsl:ZERO_HSL(),
-  grain:0,grainSize:30,vignette:0,fade:0,lightLeak:0,halation:0,bloom:0,
-  shadowTintHue:200,shadowTintAmt:0,midTintHue:40,midTintAmt:0,highlightTintHue:35,highlightTintAmt:0,mono:false});
-const A = o => Object.assign(defAdj(), o);
-const hsl6 = arr => arr.map(b => Object.assign({hue:0,sat:0,lum:0}, b));
-const H = (o) => hsl6([o.red||{},o.orange||{},o.yellow||{},o.green||{},o.blue||{},o.purple||{}]);
-const L = (id,name,cat,desc,adj) => ({id,name,cat,desc,adj:A(id==="original"?adj:Object.assign({curve:45,density:30,keepBright:90},adj))});
-const PRESETS = [
-  // ---------------- FILM: classic stocks, now with real filmic contrast + halation
-  L("original","Original","film","ภาพต้นฉบับ ไม่ปรับสี",{}),
-  L("warm_film","Warm Film","film","ฟิล์มอุ่นแดดบ่าย ผิวสวย ไฮไลต์ทองฟุ้ง",{temp:18,tint:6,vibrance:22,saturation:4,contrast:28,blacks:-12,highlights:-12,fade:8,grain:20,vignette:22,halation:22,highlightTintHue:38,highlightTintAmt:40,shadowTintHue:15,shadowTintAmt:18,hsl:H({orange:{sat:10,lum:6}})}),
-  L("vintage","Vintage","film","ฟิล์มเก่าซีดหวาน ดำยกตัว เม็ดเกรนชัด",{temp:14,saturation:-22,contrast:12,fade:34,grain:38,vignette:34,highlightTintHue:48,highlightTintAmt:40,shadowTintHue:330,shadowTintAmt:26,halation:12}),
-  L("night_film","Night Film","film","ฟิล์มกลางคืน เงาฟ้าเขียว ไฟถนนส้มเรือง",{exposure:-6,temp:-12,tint:6,contrast:38,blacks:-22,saturation:12,grain:26,vignette:30,halation:45,bloom:15,shadowTintHue:195,shadowTintAmt:55,highlightTintHue:30,highlightTintAmt:45}),
-  L("teal_orange","Teal & Orange","film","สูตรหนังฮอลลีวูด เงาเขียวน้ำทะเลลึก ผิวส้มทอง",{curve:60,density:42,contrast:30,blacks:-20,highlights:-10,vibrance:22,saturation:10,shadowTintHue:188,shadowTintAmt:78,midTintHue:195,midTintAmt:12,highlightTintHue:30,highlightTintAmt:62,vignette:18,halation:12,hsl:H({orange:{sat:24,lum:-4},yellow:{hue:-25},green:{hue:45,sat:-35},blue:{hue:-15,sat:25,lum:-10}})}),
-  L("bw_film","B&W Film","film","ขาวดำฟิล์ม คอนทราสต์แน่น เกรนสวย",{mono:true,contrast:42,blacks:-18,grain:34,vignette:26,fade:6,halation:10}),
-  L("golden_hour","Golden Hour","film","แสงทองตอนเย็น อบอุ่น ฟุ้งละมุน",{temp:34,tint:6,exposure:4,vibrance:22,contrast:18,highlights:-18,lightLeak:30,bloom:25,highlightTintHue:40,highlightTintAmt:45,shadowTintHue:20,shadowTintAmt:15}),
-  L("soft_portrait","Soft Portrait","film","ถ่ายคนผิวเนียนสว่าง โทนครีมนุ่ม",{exposure:8,contrast:6,shadows:18,temp:8,tint:4,saturation:-6,fade:14,bloom:18,highlightTintHue:25,highlightTintAmt:22,hsl:H({orange:{lum:10,sat:-6},red:{sat:-8}})}),
-  // ---------------- CINEMATIC: graded like a feature film
-  L("amber_drama","Amber Drama","cine","ดราม่าอำพัน ดำลึก ไฮไลต์ทองหนัก",{temp:24,contrast:46,blacks:-28,shadows:-8,highlights:-20,saturation:-6,vignette:42,halation:30,highlightTintHue:35,highlightTintAmt:60,shadowTintHue:25,shadowTintAmt:25,grain:16}),
-  L("neon_after_dark","Neon After Dark","cine","เมืองกลางคืนนีออน ม่วงชมพู ไฟเรือง",{temp:-18,tint:7,contrast:40,blacks:-20,vibrance:32,saturation:10,bloom:35,halation:20,grain:16,shadowTintHue:262,shadowTintAmt:60,highlightTintHue:322,highlightTintAmt:40}),
-  L("dream_pop","Dream Pop","cine","ฝันพาสเทล ฟุ้งนุ่ม แสงรั่วชมพู",{exposure:10,contrast:-4,fade:24,temp:6,tint:12,vibrance:14,lightLeak:34,bloom:35,highlightTintHue:330,highlightTintAmt:38,shadowTintHue:220,shadowTintAmt:18}),
-  L("mono_noir","Mono Noir","cine","ฟิล์มนัวร์ ดำทะมึน แสงเงาแรง",{keepBright:72,mono:true,contrast:70,blacks:-35,highlights:10,grain:42,vignette:55,halation:15}),
-  L("indie_film","Indie Film","cine","หนังอินดี้ เขียวหม่น ผิวอุ่น เงียบ ๆ",{temp:8,saturation:-16,fade:20,contrast:22,blacks:-6,grain:26,shadowTintHue:165,shadowTintAmt:40,highlightTintHue:45,highlightTintAmt:30,hsl:H({green:{hue:-15,sat:-20}})}),
-  L("bleach_bypass","Bleach Bypass","cine","สีซีดโลหะ คอนทราสต์จัด แบบหนังสงคราม",{keepBright:72,saturation:-50,contrast:62,blacks:-25,highlights:-12,grain:20,vignette:30,shadowTintHue:200,shadowTintAmt:15}),
-  L("blockbuster","Blockbuster","cine","บล็อกบัสเตอร์ ฟ้า-ส้มจัดจ้าน",{contrast:48,blacks:-22,vibrance:18,saturation:10,shadowTintHue:186,shadowTintAmt:80,highlightTintHue:28,highlightTintAmt:65,vignette:34,halation:18}),
-  L("rainy_city","Rainy City","cine","เมืองฝนตก ฟ้าหม่น เย็นเหงา",{temp:-24,saturation:-24,contrast:26,blacks:-10,fade:16,shadowTintHue:210,shadowTintAmt:45,midTintHue:200,midTintAmt:15,grain:22,vignette:25}),
-  // ---------------- MOVIE MOOD: colour inspired by famous films
-  L("neo_code","Neo Code","movie","เขียวดิจิทัลแบบหนังไซไฟ The Matrix",{temp:-12,tint:-38,contrast:52,blacks:-30,saturation:-18,shadowTintHue:140,shadowTintAmt:70,midTintHue:120,midTintAmt:25,highlightTintHue:95,highlightTintAmt:35,grain:14,vignette:30,hsl:H({green:{sat:25},yellow:{hue:20}})}),
-  L("in_the_mood","In the Mood","movie","แดงเขียวโรแมนติก แบบหนังหว่องกาไว",{temp:10,saturation:22,vibrance:10,contrast:38,blacks:-20,shadowTintHue:160,shadowTintAmt:45,highlightTintHue:15,highlightTintAmt:50,vignette:45,grain:26,halation:40,hsl:H({red:{sat:30,lum:-6},green:{hue:-20,sat:10}})}),
-  L("neon_2049","Neon 2049","movie","หมอกส้มอนาคต แบบ Blade Runner 2049",{temp:46,tint:6,contrast:30,blacks:-18,highlights:-24,saturation:-12,fade:10,bloom:45,highlightTintHue:30,highlightTintAmt:75,shadowTintHue:18,shadowTintAmt:35,midTintHue:28,midTintAmt:25}),
-  L("desert_spice","Desert Spice","movie","ทะเลทรายทองซีด แบบหนัง Dune",{temp:30,saturation:-38,contrast:36,blacks:-18,fade:8,highlightTintHue:40,highlightTintAmt:50,shadowTintHue:25,shadowTintAmt:35,midTintHue:35,midTintAmt:20,grain:12,vignette:28}),
-  L("moonlit","Moonlit Blue","movie","น้ำเงินม่วงยามค่ำ แบบหนัง Moonlight",{temp:-26,tint:6,saturation:18,contrast:34,blacks:-14,shadowTintHue:232,shadowTintAmt:65,highlightTintHue:300,highlightTintAmt:30,bloom:20,hsl:H({blue:{sat:35},purple:{sat:25},orange:{sat:10}})}),
-  L("fury_road","Fury Road","movie","ส้มฟ้าสุดขั้ว แบบ Mad Max: Fury Road",{contrast:60,blacks:-28,saturation:32,vibrance:22,shadowTintHue:190,shadowTintAmt:90,highlightTintHue:28,highlightTintAmt:80,vignette:30,hsl:H({orange:{sat:35},blue:{sat:30}})}),
-  L("paris_cafe","Paris Café","movie","เขียว-แดงอบอุ่นแบบหนัง Amélie",{temp:16,tint:-12,saturation:26,contrast:28,blacks:-10,highlightTintHue:50,highlightTintAmt:40,shadowTintHue:120,shadowTintAmt:25,vignette:40,halation:20,hsl:H({green:{hue:-30,sat:22},red:{sat:32},yellow:{sat:15}})}),
-  L("pastel_hotel","Pastel Hotel","movie","พาสเทลชมพูสมมาตร แบบ Grand Budapest Hotel",{exposure:8,contrast:8,fade:18,tint:20,saturation:14,highlightTintHue:340,highlightTintAmt:40,shadowTintHue:200,shadowTintAmt:20,hsl:H({red:{hue:10,lum:8},purple:{sat:15}})}),
-  L("city_of_stars","City of Stars","movie","ม่วงฟ้าโพล้เพล้ แบบ La La Land",{tint:9,temp:-6,saturation:28,contrast:30,blacks:-12,shadowTintHue:250,shadowTintAmt:60,highlightTintHue:320,highlightTintAmt:40,bloom:35,hsl:H({blue:{sat:20},yellow:{sat:20}})}),
-  L("night_drive","Night Drive","movie","ชมพูแมเจนต้ากลางคืน แบบหนัง Drive",{tint:12,temp:-14,contrast:44,blacks:-24,saturation:12,shadowTintHue:212,shadowTintAmt:55,highlightTintHue:330,highlightTintAmt:55,halation:35,bloom:25,grain:14}),
-  L("sin_noir","Sin Noir","movie","ขาวดำจัดจ้าน แบบ Sin City",{keepBright:72,mono:true,contrast:85,blacks:-45,highlights:15,grain:38,vignette:55}),
-  L("gotham_stairs","Gotham Stairs","movie","เขียวเหลืองหม่นบนบันได แบบหนัง Joker",{temp:12,tint:-16,saturation:-8,contrast:38,blacks:-16,shadowTintHue:160,shadowTintAmt:50,highlightTintHue:50,highlightTintAmt:45,grain:26,vignette:35,hsl:H({orange:{sat:15},red:{sat:20}})}),
-  L("retro_70s","Retro 70s","movie","ฟิล์มยุค 70 อิ่มสี อุ่นซีด",{temp:22,saturation:20,contrast:20,fade:22,highlightTintHue:42,highlightTintAmt:40,shadowTintHue:12,shadowTintAmt:22,grain:34,vignette:28,hsl:H({red:{sat:20},orange:{sat:15},blue:{hue:15,sat:-15}})}),
-  // ---------------- MUSIC MOOD: colour that feels like a genre
-  L("lofi","Lo-fi Beats","music","นั่งชิลฟังโลไฟ สีซีดอุ่น เกรนนุ่ม",{fade:32,saturation:-20,temp:12,tint:8,grain:38,contrast:8,highlightTintHue:35,highlightTintAmt:32,shadowTintHue:250,shadowTintAmt:22,vignette:28}),
-  L("city_pop","City Pop 80s","music","ซิตี้ป๊อปยุค 80 ชมพูฟ้า ฟุ้งเรโทร",{tint:7,temp:4,saturation:26,vibrance:12,contrast:16,bloom:35,fade:10,highlightTintHue:330,highlightTintAmt:40,shadowTintHue:220,shadowTintAmt:40,grain:16}),
-  L("synthwave","Synthwave","music","ซินธ์เวฟนีออนม่วงชมพูสุดจัด",{tint:16,temp:-22,contrast:44,blacks:-20,saturation:38,shadowTintHue:270,shadowTintAmt:80,highlightTintHue:318,highlightTintAmt:65,bloom:45,halation:25,vignette:30}),
-  L("kpop_candy","K-Pop Candy","music","เคป๊อปสดใส ผิวใส สีลูกกวาด",{exposure:12,contrast:14,saturation:22,vibrance:32,tint:10,highlights:-18,shadows:16,bloom:22,highlightTintHue:340,highlightTintAmt:22,hsl:H({orange:{lum:10},red:{sat:15},blue:{sat:20}})}),
-  L("jazz_club","Jazz Club","music","แจ๊สคลับควันบุหรี่ ดำลึก ไฟอำพัน",{keepBright:72,temp:26,contrast:52,blacks:-34,saturation:-14,highlightTintHue:35,highlightTintAmt:60,shadowTintHue:20,shadowTintAmt:20,vignette:60,grain:32,halation:35}),
-  L("indie_folk","Indie Folk","music","อินดี้โฟล์ค ธรรมชาติ หม่นอุ่น",{temp:16,saturation:-18,fade:20,tint:-6,contrast:18,highlightTintHue:45,highlightTintAmt:30,shadowTintHue:100,shadowTintAmt:25,grain:22,hsl:H({green:{hue:-20,sat:-15}})}),
-  L("rnb_velvet","R&B Velvet","music","อาร์แอนด์บีกำมะหยี่ ม่วงแดงหรูหรา",{temp:10,tint:8,contrast:40,blacks:-24,saturation:12,shadowTintHue:300,shadowTintAmt:55,highlightTintHue:20,highlightTintAmt:45,bloom:22,vignette:40}),
-  L("grunge_90s","Grunge 90s","music","กรันจ์ยุค 90 สีซีดสกปรก เกรนหนัก",{saturation:-38,contrast:44,blacks:-14,tint:-12,temp:-6,shadowTintHue:140,shadowTintAmt:35,grain:60,vignette:45,fade:10}),
-  L("bossa_summer","Bossa Summer","music","บอสซาโนวาหน้าร้อน แดดจ้าสดชื่น",{temp:22,exposure:8,vibrance:28,contrast:18,highlights:-18,lightLeak:32,highlightTintHue:45,highlightTintAmt:32,hsl:H({blue:{sat:25,hue:-10},yellow:{sat:15}})}),
-  L("luk_thung","Luk Thung Gold","music","ลูกทุ่งทองอร่าม อุ่นสด เวทีไฟวิบวับ",{temp:36,saturation:22,contrast:30,blacks:-12,highlightTintHue:45,highlightTintAmt:60,bloom:30,halation:25,vignette:32,hsl:H({red:{sat:20},yellow:{sat:25}})}),
-];
-const clone = o => JSON.parse(JSON.stringify(o));
-const isIdentity = a => JSON.stringify(a) === JSON.stringify(defAdj());
-// Look strength: scale every amount (not hues / grain size) by s; 1 = as designed.
-const NO_SCALE = new Set(["grainSize","keepBright","shadowTintHue","midTintHue","highlightTintHue","mono","hsl"]);
-function effective(a,s){
-  if(s===1) return a;
-  const o=clone(a);
-  for(const k in o){ if(!NO_SCALE.has(k)&&typeof o[k]==="number") o[k]*=s; }
-  o.hsl=o.hsl.map(b=>({hue:b.hue*s,sat:b.sat*s,lum:b.lum*s}));
-  if(s<0.35) o.mono=false;
-  return o;
-}
+<input type="file" id="f-one" accept="image/*" hidden>
+<input type="file" id="f-many" accept="image/*" multiple hidden>
+<input type="file" id="f-ref" accept="image/*" hidden>
 
-function loadMine(){ try { return JSON.parse(localStorage.getItem("moodcam.looks") || "[]").map(l=>Object.assign(l,{adj:A(l.adj)})); } catch(e){ return []; } }
-function saveMine(){ try { localStorage.setItem("moodcam.looks", JSON.stringify(mine)); } catch(e){} }
-let mine = loadMine();
-const allLooks = () => mine.concat(PRESETS);
-
-// ======================================================================
-// Colour engine: filmic tone curve, split/3-way grading, HSL, halation, bloom, grain
-// ======================================================================
-const CENTERS=[0,30,60,120,220,290], SPANS=[30,30,40,60,60,50];
-function hsvToRgb(h,s,v,out){const c=v*s,hp=h/60,x=c*(1-Math.abs(hp%2-1)),m=v-c;let r,g,b;
-  switch(hp|0){case 0:r=c;g=x;b=0;break;case 1:r=x;g=c;b=0;break;case 2:r=0;g=c;b=x;break;case 3:r=0;g=x;b=c;break;case 4:r=x;g=0;b=c;break;default:r=c;g=0;b=x;}
-  out[0]=r+m;out[1]=g+m;out[2]=b+m;}
-function tintOffset(hue,amt,k0=0.26){ if(amt<=0) return [0,0,0]; const o=[0,0,0]; hsvToRgb(((hue%360)+360)%360,1,1,o);
-  const avg=(o[0]+o[1]+o[2])/3,k=amt/100*k0; return [(o[0]-avg)*k,(o[1]-avg)*k,(o[2]-avg)*k]; }
-const smooth=(e0,e1,x)=>{let t=(x-e0)/(e1-e0);t=t<0?0:t>1?1:t;return t*t*(3-2*t)};
-function hash(x,y){let h=(Math.imul(x,374761393)+Math.imul(y,668265263)+1337)|0;h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return (h&0xFFFF)/32767.5-1;}
-
-function applyAdjust(d,w,h,a){
-  if(isIdentity(a)) return;
-  const expMul=Math.pow(2,a.exposure/100*1.5),t=a.temp/100,ti=a.tint/100;
-  const rM=expMul*(1+.18*t)*(1+.06*ti), gM=expMul*(1-.14*ti), bM=expMul*(1-.18*t)*(1+.06*ti);
-  const sh=a.shadows/100,hi=a.highlights/100,shOn=sh!==0||hi!==0;
-  // Filmic S-curve: punchy mids, soft roll-off at both ends (instead of linear clipping)
-  const ck=(a.contrast>=0?a.contrast/100*1.3:a.contrast/100*.55)+a.curve/100*.9, cOn=ck!==0, dn=a.density/100*.5;
-  const bl=a.blacks/100, crush=bl<0?-bl*.14:0, lift=bl>0?bl*.12:0;
-  const satM=1+a.saturation/100, vib=a.vibrance/100*.9, satOn=a.saturation!==0||a.vibrance!==0;
-  const bh=a.hsl.map(b=>b.hue),bs=a.hsl.map(b=>b.sat),bl2=a.hsl.map(b=>b.lum),hslOn=a.hsl.some(b=>b.hue||b.sat||b.lum);
-  const sT=tintOffset(a.shadowTintHue,a.shadowTintAmt),mT=tintOffset(a.midTintHue,a.midTintAmt,.2),hT=tintOffset(a.highlightTintHue,a.highlightTintAmt);
-  const splitOn=a.shadowTintAmt>0||a.highlightTintAmt>0||a.midTintAmt>0;
-  const fade=a.fade/100,fM=1-fade*.22,fA=fade*.10,vig=a.vignette/100,leak=a.lightLeak/100;
-  const tmp=[0,0,0];
-  const curve=v=>{const x=v-.5; return ck>0 ? .5+x*(1+ck)/(1+ck*Math.min(1,Math.abs(2*x))*.85) : .5+x*(1+ck);};
-  for(let y=0;y<h;y++){
-    const ny=(y+.5)/h-.5, ly=(y+.5)/h;
-    for(let x=0;x<w;x++){
-      const i=(y*w+x)*4;
-      let r=d[i]/255*rM,g=d[i+1]/255*gM,b=d[i+2]/255*bM;
-      if(shOn){let l=.2126*r+.7152*g+.0722*b;l=l<0?0:l>1?1:l;const inv=1-l,dd=sh*.38*inv*inv*inv+hi*.38*l*l*l;r+=dd;g+=dd;b+=dd;}
-      if(cOn){r=curve(r);g=curve(g);b=curve(b);}
-      if(crush){r=(r-crush)/(1-crush);g=(g-crush)/(1-crush);b=(b-crush)/(1-crush);if(r<0)r=0;if(g<0)g=0;if(b<0)b=0;}
-      if(lift){r=r*(1-lift)+lift;g=g*(1-lift)+lift;b=b*(1-lift)+lift;}
-      if(satOn){const l=.2126*r+.7152*g+.0722*b,mx=Math.max(r,g,b),mn=Math.min(r,g,b);let s=mx-mn;s=s<0?0:s>1?1:s;
-        const f=Math.max(0,satM*(1+vib*(1-s)));r=l+(r-l)*f;g=l+(g-l)*f;b=l+(b-l)*f;}
-      if(hslOn){const cr=Math.min(1,Math.max(0,r)),cg=Math.min(1,Math.max(0,g)),cb=Math.min(1,Math.max(0,b));
-        const mx=Math.max(cr,cg,cb),mn=Math.min(cr,cg,cb),dd=mx-mn;
-        if(dd>1e-4){let hue=mx===cr?60*(((cg-cb)/dd)%6):mx===cg?60*((cb-cr)/dd+2):60*((cr-cg)/dd+4);if(hue<0)hue+=360;
-          const s=dd/mx;let dh=0,ds=0,dl=0;
-          for(let k=0;k<6;k++){let dist=Math.abs(hue-CENTERS[k]);if(dist>180)dist=360-dist;const wg=1-dist/SPANS[k];if(wg>0){dh+=wg*bh[k];ds+=wg*bs[k];dl+=wg*bl2[k];}}
-          if(dh||ds||dl){let nh=(hue+dh*.3)%360;if(nh<0)nh+=360;const ns=Math.min(1,Math.max(0,s*(1+ds/100)));hsvToRgb(nh,ns,mx*(1+dl/100*.35*s),tmp);r=tmp[0];g=tmp[1];b=tmp[2];}}}
-      if(splitOn){let l=.2126*r+.7152*g+.0722*b;l=l<0?0:l>1?1:l;
-        // skin protection: warm, moderately saturated pixels (r>g>b) keep ~55% less grading
-        const sk=(r>g&&g>b&&l>.12)?Math.min(1,(r-b)*2.6)*Math.min(1,(g-b)/(r-b+1e-4)*1.6)*.55:0,k=1-sk;
-        const ws=(1-l)*(1-l)*1.15*k,wh=l*l*k,wm=4*l*(1-l)*k;
-        r+=sT[0]*ws+mT[0]*wm+hT[0]*wh;g+=sT[1]*ws+mT[1]*wm+hT[1]*wh;b+=sT[2]*ws+mT[2]*wm+hT[2]*wh;}
-      if(dn>0){ // film density: deeper mids, richer colour, highlights kept
-        r=r>0?Math.pow(r,1+dn*(1-r*.5)):r; g=g>0?Math.pow(g,1+dn*(1-g*.5)):g; b=b>0?Math.pow(b,1+dn*(1-b*.5)):b; }
-      if(a.mono){const l=.2126*r+.7152*g+.0722*b;r=g=b=l;}
-      if(fade>0){r=r*fM+fA;g=g*fM+fA;b=b*fM+fA;}
-      if(vig>0){const nx=(x+.5)/w-.5,dd=Math.sqrt(nx*nx+ny*ny)*1.4142,m=1-vig*.75*smooth(.4,1.05,dd);r*=m;g*=m;b*=m;}
-      if(leak>0){const dx=1-(x+.5)/w,dist=Math.sqrt(dx*dx+ly*ly);let lt=Math.max(0,1-dist/.9);lt=lt*lt*leak;
-        r=1-(1-Math.min(1,Math.max(0,r)))*(1-lt);g=1-(1-Math.min(1,Math.max(0,g)))*(1-lt*.55);b=1-(1-Math.min(1,Math.max(0,b)))*(1-lt*.2);}
-      d[i]=r*255+.5;d[i+1]=g*255+.5;d[i+2]=b*255+.5;
-    }
-  }
-}
-// Halation (film's red glow around bright light) and bloom (soft white glow)
-function applyGlow(d,w,h,a){
-  const hal=a.halation/100,blo=a.bloom/100; if(hal<=0&&blo<=0) return;
-  const f=4,sw=Math.max(2,Math.ceil(w/f)),sh=Math.max(2,Math.ceil(h/f)),m=new Float32Array(sw*sh);
-  for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){const i=(Math.min(h-1,y*f)*w+Math.min(w-1,x*f))*4;
-    const l=(.2126*d[i]+.7152*d[i+1]+.0722*d[i+2])/255;const v=Math.max(0,(l-.6)/.4);m[y*sw+x]=v*v;}
-  const g=boxBlur(m,sw,sh,1,Math.max(1,Math.round(Math.min(sw,sh)*.035)),3);
-  const kr=hal*1.1+blo*.7,kg=hal*.28+blo*.62,kb=hal*.12+blo*.5;
-  for(let y=0;y<h;y++){const fy=Math.min(sh-1.001,y/f),y0=fy|0,ty=fy-y0;
-    for(let x=0;x<w;x++){const fx=Math.min(sw-1.001,x/f),x0=fx|0,tx=fx-x0,o=y0*sw+x0;
-      const v=(g[o]*(1-tx)+g[o+1]*tx)*(1-ty)+(g[o+sw]*(1-tx)+g[o+sw+1]*tx)*ty; if(v<.002) continue;
-      const i=(y*w+x)*4;
-      d[i]=255-(255-d[i])*(1-Math.min(1,v*kr)); d[i+1]=255-(255-d[i+1])*(1-Math.min(1,v*kg)); d[i+2]=255-(255-d[i+2])*(1-Math.min(1,v*kb));}}
-}
-function applyGrain(d,w,h,a){
-  const amt=a.grain/100*.16; if(amt<=0) return;
-  const px=Math.max(1,Math.min(w,h)/900*(.6+a.grainSize/40));
-  for(let y=0;y<h;y++){const gy=Math.floor(y/px);for(let x=0;x<w;x++){const i=(y*w+x)*4;
-    const l=(.2126*d[i]+.7152*d[i+1]+.0722*d[i+2])/255,n=hash(Math.floor(x/px),gy)*amt*(1-Math.abs(l-.5)*1.2)*255;
-    d[i]+=n;d[i+1]+=n;d[i+2]+=n;}}
-}
-function meanLum(d){let s=0,n=0;for(let i=0;i<d.length;i+=64){s+=.2126*d[i]+.7152*d[i+1]+.0722*d[i+2];n++;}return n?s/n/255:0;}
-// Brightness balance: grading may darken the picture; lift mid-tones back (gamma) toward
-// keepBright% of the original mean. Blacks stay black and whites stay white, so the depth remains.
-function balance(d,before,a){
-  if(!(a.keepBright>0)) return; const after=meanLum(d),target=Math.min(.6,before*a.keepBright/100);
-  if(after<=0.01||after>=target) return;
-  const g=Math.max(.55,Math.log(target)/Math.log(after)); if(g>.995) return;
-  const lut=new Uint8ClampedArray(256); for(let v=0;v<256;v++) lut[v]=Math.pow(v/255,g)*255+.5;
-  for(let i=0;i<d.length;i+=4){d[i]=lut[d[i]];d[i+1]=lut[d[i+1]];d[i+2]=lut[d[i+2]];}
-}
-function applyGrade(d,w,h,a){ const m0=meanLum(d); applyAdjust(d,w,h,a); balance(d,m0,a); applyGlow(d,w,h,a); applyGrain(d,w,h,a); }
-
-// ======================================================================
-// Blur + AI skin retouch (web: skin-tone mask instead of face contours)
-// ======================================================================
-function boxBlur(src,w,h,ch,r,passes){ // src: Float32Array with ch channels
-  let a=Float32Array.from(src),b=new Float32Array(src.length);r=Math.max(1,Math.min(r,(Math.min(w,h)>>1)-1));const div=2*r+1;
-  for(let p=0;p<passes;p++){
-    for(let y=0;y<h;y++)for(let c=0;c<ch;c++){let s=0;const o=y*w;for(let k=-r;k<=r;k++)s+=a[(o+Math.min(w-1,Math.max(0,k)))*ch+c];
-      for(let x=0;x<w;x++){b[(o+x)*ch+c]=s/div;s+=a[(o+Math.min(w-1,x+r+1))*ch+c]-a[(o+Math.max(0,x-r))*ch+c];}}
-    for(let x=0;x<w;x++)for(let c=0;c<ch;c++){let s=0;for(let k=-r;k<=r;k++)s+=b[(Math.min(h-1,Math.max(0,k))*w+x)*ch+c];
-      for(let y=0;y<h;y++){a[(y*w+x)*ch+c]=s/div;s+=b[(Math.min(h-1,y+r+1)*w+x)*ch+c]-b[(Math.max(0,y-r)*w+x)*ch+c];}}
-  }
-  return a;
-}
-const aiCache=new WeakMap();
-function aiPrep(canvas,d,w,h){
-  let c=aiCache.get(canvas); if(c) return c;
-  const rgb=new Float32Array(w*h*3),mask=new Float32Array(w*h);
-  for(let i=0,j=0,k=0;i<d.length;i+=4,j+=3,k++){const r=d[i],g=d[i+1],b=d[i+2];rgb[j]=r;rgb[j+1]=g;rgb[j+2]=b;
-    const y=.299*r+.587*g+.114*b,cb=128-.168736*r-.331264*g+.5*b,cr=128+.5*r-.418688*g-.081312*b;
-    const sc=smooth(126,136,cr)*(1-smooth(172,182,cr))*smooth(72,82,cb)*(1-smooth(126,136,cb))*smooth(35,60,y);mask[k]=sc;}
-  const s=Math.min(w,h);
-  c={blur:boxBlur(rgb,w,h,3,Math.round(s*.012),3),mask:boxBlur(mask,w,h,1,Math.round(s*.01),2)};
-  aiCache.set(canvas,c); return c;
-}
-function applyAI(canvas,d,w,h,ai){
-  if(!(ai.smooth||ai.tone||ai.brighten||ai.details)) return;
-  const {blur,mask}=aiPrep(canvas,d,w,h);
-  const sm=ai.smooth/100*.9,to=ai.tone/100,br=ai.brighten/100*.22,de=ai.details/100*.7;
-  for(let k=0,i=0,j=0;k<w*h;k++,i+=4,j+=3){
-    const r0=d[i]/255,g0=d[i+1]/255,b0=d[i+2]/255,br0=blur[j]/255,bg0=blur[j+1]/255,bb0=blur[j+2]/255,m=mask[k];
-    let r=r0,g=g0,b=b0;
-    if(m>0.01){
-      if(sm){const diff=(Math.abs(r-br0)+Math.abs(g-bg0)+Math.abs(b-bb0))/3,keep=Math.max(0,Math.min(1,1-diff*5)),ws=m*sm*(.35+.65*keep);r+=(br0-r)*ws;g+=(bg0-g)*ws;b+=(bb0-b)*ws;}
-      if(to){const tt=m*to;r-=(r-g)*.22*tt;b+=(g-b)*.08*tt;}
-      if(br){const bt=m*br;r+=(1-r)*bt;g+=(1-g)*bt;b+=(1-b)*bt;}
-    }
-    if(de){const dm=de*(1-m);r+=(r0-br0)*dm;g+=(g0-bg0)*dm;b+=(b0-bb0)*dm;}
-    d[i]=r*255+.5;d[i+1]=g*255+.5;d[i+2]=b*255+.5;
-  }
-}
-
-// ======================================================================
-// Social Studio composer — port of SocialComposer.kt
-// ======================================================================
-const ASPECTS=[["Original",null],["1:1",1],["4:5",.8],["9:16",9/16],["16:9",16/9]];
-const FRAMES=[["None",null],["Film","#0d0d0c"],["Black","#0d0d0c"],["White","#fafaf7"],["Polaroid","#f6f3ec"],["Cream","#ede3cf"]];
-const BGS=[["Crop",null],["Blur",null],["Cream","#ede3cf"],["Sand","#d9c29a"],["Slate","#7c93ad"],["Coral","#d9826a"],["Black","#0b0b0b"]];
-function drawCropped(ctx,img,dx,dy,dw,dh,cx,cy){
-  const ratio=dw/dh,bw=img.width,bh=img.height;let sw=bw,sh=bw/ratio;if(sh>bh){sh=bh;sw=bh*ratio;}
-  const l=Math.min(bw-sw,Math.max(0,cx*bw-sw/2)),t=Math.min(bh-sh,Math.max(0,cy*bh-sh/2));
-  ctx.drawImage(img,l,t,sw,sh,dx,dy,dw,dh);
-}
-function compose(src,p,maxLong,watermark){
-  const ratio=p.aspect??src.width/src.height;let ow,oh;
-  if(ratio>=1){ow=maxLong;oh=Math.round(maxLong/ratio);}else{oh=maxLong;ow=Math.round(maxLong*ratio);}
-  const out=document.createElement("canvas");out.width=ow;out.height=oh;const c=out.getContext("2d");c.imageSmoothingQuality="high";
-  const u=Math.min(ow,oh),f=FRAMES[p.frame][0];
-  const ins=f==="None"?[0,0,0,0]:f==="Film"?[u*.05,u*.09,u*.05,u*.09]:f==="Polaroid"?[u*.05,u*.05,u*.05,u*.2]:[u*.045,u*.045,u*.045,u*.045];
-  if(FRAMES[p.frame][1]){c.fillStyle=FRAMES[p.frame][1];c.fillRect(0,0,ow,oh);}
-  const ix=ins[0],iy=ins[1],iw=ow-ins[0]-ins[2],ih=oh-ins[1]-ins[3];
-  const bg=BGS[p.bg];
-  if(bg[0]==="Crop") drawCropped(c,src,ix,iy,iw,ih,p.cx,p.cy);
-  else{
-    if(bg[0]==="Blur"){const tiny=document.createElement("canvas");tiny.width=Math.max(1,src.width>>5);tiny.height=Math.max(1,src.height>>5);
-      tiny.getContext("2d").drawImage(src,0,0,tiny.width,tiny.height);c.save();c.imageSmoothingEnabled=true;drawCropped(c,tiny,ix,iy,iw,ih,.5,.5);c.restore();
-      c.fillStyle="rgba(0,0,0,.15)";c.fillRect(ix,iy,iw,ih);}
-    else{c.fillStyle=bg[1];c.fillRect(ix,iy,iw,ih);}
-    const m=u*.06,s=Math.min((iw-2*m)/src.width,(ih-2*m)/src.height),dw=src.width*s,dh=src.height*s;
-    c.drawImage(src,ix+iw/2-dw/2,iy+ih/2-dh/2,dw,dh);
-  }
-  if(f==="Film"){c.fillStyle="#2c2a26";const hw=u*.035,hh=ins[1]*.32;for(let x=u*.03;x<ow-hw;x+=hw*2){c.fillRect(x,ins[1]*.12,hw,hh);c.fillRect(x,oh-ins[3]*.12-hh,hw,hh);}
-    c.fillStyle="#d89a36";c.font=`${ins[1]*.28}px "IBM Plex Mono", monospace`;c.textAlign="left";c.fillText("MOODCAM 400",u*.05,ins[1]*.86);c.textAlign="right";c.fillText("▸ 12A",ow-u*.05,oh-ins[3]*.32);}
-  // Cinema letterbox: black bars down to 2.39:1 inside the photo area
-  let lb=0;
-  if(p.letterbox&&iw/ih<2.39){lb=(ih-iw/2.39)/2;c.fillStyle="#000";c.fillRect(ix,iy,iw,lb);c.fillRect(ix,iy+ih-lb,iw,lb);}
-  if(p.caption.trim()&&p.subtitle){
-    // movie-subtitle style: sans, outlined, sits in the lower bar when letterboxed
-    const fs=Math.max(12,u*(lb?.045:.05)); c.font=`600 ${fs}px "IBM Plex Sans Thai", sans-serif`; c.textAlign="center";
-    const y=lb?iy+ih-lb/2+fs*.35:iy+ih-u*.08; c.lineJoin="round"; c.lineWidth=fs*.18; c.strokeStyle="rgba(0,0,0,.85)";
-    c.strokeText(p.caption,ow/2,y); c.fillStyle="#fff3a8"; c.fillText(p.caption,ow/2,y);
-  } else if(p.caption.trim()){
-    c.textAlign="center";
-    if(f==="Polaroid"){c.fillStyle="#2a2622";c.font=`italic ${u*.055}px "Cormorant Garamond", serif`;c.fillText(p.caption,ow/2,iy+ih+ins[3]*.55);}
-    else{c.fillStyle="#fff";c.shadowColor="rgba(0,0,0,.6)";c.shadowBlur=u*.015;c.font=`${u*.05}px "Cormorant Garamond", serif`;c.fillText(p.caption,ow/2,iy+ih-u*.07);c.shadowBlur=0;}
-  }
-  if(p.date){ // film-camera date imprint
-    const dt=new Date(),txt=`'${String(dt.getFullYear()).slice(2)} ${String(dt.getMonth()+1).padStart(2," ")} ${String(dt.getDate()).padStart(2,"0")}`;
-    const fs=u*.042; c.font=`500 ${fs}px "IBM Plex Mono", monospace`; c.textAlign="right";
-    c.shadowColor="rgba(255,120,40,.9)"; c.shadowBlur=fs*.45; c.fillStyle="#ff9a3c";
-    c.fillText(txt,ix+iw-u*.04,iy+ih-lb-u*.04-(p.music?u*.2:0)); c.shadowBlur=0;
-  }
-  if(p.music){ // "Now playing" card
-    const cw=Math.min(iw*.86,u*.9),chh=u*.15,cx=ix+(iw-cw)/2,cy=iy+ih-lb-chh-u*.04,r=chh*.22;
-    c.fillStyle="rgba(12,12,12,.55)"; c.beginPath(); c.moveTo(cx+r,cy); c.arcTo(cx+cw,cy,cx+cw,cy+chh,r); c.arcTo(cx+cw,cy+chh,cx,cy+chh,r); c.arcTo(cx,cy+chh,cx,cy,r); c.arcTo(cx,cy,cx+cw,cy,r); c.fill();
-    const pad=chh*.18,art=chh-pad*2; const gr=c.createLinearGradient(cx+pad,cy+pad,cx+pad+art,cy+pad+art); gr.addColorStop(0,"#d89a36"); gr.addColorStop(1,"#7a3b5c");
-    c.fillStyle=gr; c.fillRect(cx+pad,cy+pad,art,art); c.fillStyle="rgba(255,255,255,.9)"; c.font=`${art*.5}px sans-serif`; c.textAlign="center"; c.fillText("♪",cx+pad+art/2,cy+pad+art*.68);
-    const tx=cx+pad*2+art; c.textAlign="left"; c.fillStyle="#fff"; c.font=`600 ${chh*.22}px "IBM Plex Sans Thai", sans-serif`;
-    c.fillText(p.song||"Untitled",tx,cy+chh*.36,cw-art-pad*4); c.fillStyle="rgba(255,255,255,.7)"; c.font=`${chh*.17}px "IBM Plex Sans Thai", sans-serif`;
-    c.fillText(p.artist||"MoodCam",tx,cy+chh*.58,cw-art-pad*4);
-    const bw=cw-art-pad*4,by=cy+chh*.76; c.fillStyle="rgba(255,255,255,.25)"; c.fillRect(tx,by,bw,chh*.035); c.fillStyle="#fff"; c.fillRect(tx,by,bw*.38,chh*.035);
-    c.beginPath(); c.arc(tx+bw*.38,by+chh*.0175,chh*.05,0,7); c.fill();
-  }
-  if(watermark){c.textAlign="left";c.font=`600 ${u*.024}px "IBM Plex Sans Thai", sans-serif`;c.fillStyle="rgba(216,154,54,.92)";
-    c.shadowColor="rgba(0,0,0,.5)";c.shadowBlur=u*.008;const wm=watermark.split("").join(String.fromCharCode(8202));
-    c.fillText(wm,ix+u*.03,f==="Polaroid"?iy+ih+ins[3]*.85:iy+u*.05+(lb||0));c.shadowBlur=0;}
-  return out;
-}
-
-// ======================================================================
-// State, history, rendering
-// ======================================================================
-const S={lookId:"original",lookName:"Original",adj:defAdj(),strength:100,ai:{smooth:0,tone:0,brighten:0,details:0},
-  social:{aspect:null,cx:.5,cy:.5,frame:0,bg:0,caption:"",letterbox:false,subtitle:false,date:false,music:false,song:"",artist:""},watermark:true,quality:.92};
-const grade=()=>effective(S.adj,S.strength/100);
-let full=null,prev=null,sourceName="SAMPLE",tab="looks",adjTab="color",band=0,aiTool="auto",lookCat="movie",lastOut=null;
-const hist={undo:[],redo:[],last:null};
-const snap=()=>JSON.stringify({lookId:S.lookId,lookName:S.lookName,adj:S.adj,strength:S.strength,ai:S.ai,social:S.social});
-function commit(){const s=snap();if(s===hist.last)return;if(hist.last)hist.undo.push(hist.last);if(hist.undo.length>60)hist.undo.shift();hist.redo=[];hist.last=s;syncHist();}
-function restore(s){Object.assign(S,JSON.parse(s));hist.last=s;syncHist();renderPanel();requestRender();}
-function syncHist(){$("#undo").disabled=!hist.undo.length;$("#redo").disabled=!hist.redo.length;}
-const $=q=>document.querySelector(q);
-
-function scaled(img,maxSide){const s=Math.min(1,maxSide/Math.max(img.width,img.height));const c=document.createElement("canvas");
-  c.width=Math.max(1,Math.round(img.width*s));c.height=Math.max(1,Math.round(img.height*s));const x=c.getContext("2d");x.imageSmoothingQuality="high";x.drawImage(img,0,0,c.width,c.height);return c;}
-function renderEdit(base){
-  const w=base.width,h=base.height,ctx=base.getContext("2d",{willReadFrequently:true}),id=ctx.getImageData(0,0,w,h);
-  applyAI(base,id.data,w,h,S.ai); applyGrade(id.data,w,h,grade());
-  const out=document.createElement("canvas");out.width=w;out.height=h;out.getContext("2d").putImageData(id,0,0);return out;
-}
-const wmText=()=>S.watermark?"MOODCAM · "+S.lookName.toUpperCase():null;
-let dirty=false,rendering=false,showOriginal=false;
-function requestRender(){dirty=true;if(!rendering){rendering=true;requestAnimationFrame(doRender);}}
-function doRender(){
-  if(!prev){rendering=false;return;}
-  dirty=false;
-  const view=$("#view"),vc=view.getContext("2d");
-  const img=showOriginal?prev:compose(renderEdit(prev),S.social,Math.max(prev.width,prev.height),wmText());
-  lastOut=img;view.width=img.width;view.height=img.height;vc.drawImage(img,0,0);
-  $("#tag").textContent=(showOriginal?"ORIGINAL":sourceName+" · "+S.lookName.toUpperCase());
-  $("#hint").hidden=!(tab==="social"&&BGS[S.social.bg][0]==="Crop"&&S.social.aspect!==null);
-  if(dirty) requestAnimationFrame(doRender); else rendering=false;
-}
-
-// ---------- thumbnails
-let thumbSrc=null;const thumbCache=new Map();
-function thumbFor(look){
-  const key=look.id+JSON.stringify(look.adj);if(thumbCache.has(key))return thumbCache.get(key);
-  const c=document.createElement("canvas");c.width=thumbSrc.width;c.height=thumbSrc.height;const x=c.getContext("2d");x.drawImage(thumbSrc,0,0);
-  const id=x.getImageData(0,0,c.width,c.height);applyGrade(id.data,c.width,c.height,look.adj);x.putImageData(id,0,0);thumbCache.set(key,c);return c;
-}
-
-// ---------- load images
-function setSource(img,name){
-  full=scaled(img,4000);prev=scaled(full,1400);sourceName=name;
-  const t=document.createElement("canvas");const r=prev.width/prev.height;t.height=200;t.width=Math.round(200*r);
-  const tw=Math.min(t.width,150),th=200;const tc=document.createElement("canvas");tc.width=tw;tc.height=th;drawCropped(tc.getContext("2d"),prev,0,0,tw,th,.5,.5);
-  thumbSrc=tc;thumbCache.clear();
-  S.social.cx=.5;S.social.cy=.5;hist.undo=[];hist.redo=[];hist.last=null;commit();
-  renderPanel();requestRender();
-}
-function loadFile(file){
-  if(!file)return;const url=URL.createObjectURL(file);const img=new Image();
-  img.onload=()=>{setSource(img,"PHOTO");URL.revokeObjectURL(url);toast("โหลดรูปแล้ว — เลือก Look ได้เลย");};
-  img.onerror=()=>{toast("เปิดไฟล์นี้ไม่ได้ ลองใช้ JPG หรือ PNG");URL.revokeObjectURL(url);};
-  img.src=url;
-}
-$("#cam").addEventListener("change",e=>{loadFile(e.target.files[0]);e.target.value="";});
-$("#pick").addEventListener("change",e=>{loadFile(e.target.files[0]);e.target.value="";});
-document.addEventListener("dragover",e=>e.preventDefault());
-document.addEventListener("drop",e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f&&f.type.startsWith("image/"))loadFile(f);});
-
-function sampleScene(w=1050,h=1400){ // same golden-hour scene as the Android sample image
-  const c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d");
-  let g=x.createLinearGradient(0,0,0,h*.7);g.addColorStop(0,"#2b3a55");g.addColorStop(.55,"#b8735a");g.addColorStop(1,"#f2b266");x.fillStyle=g;x.fillRect(0,0,w,h);
-  g=x.createRadialGradient(w*.62,h*.55,0,w*.62,h*.55,w*.45);g.addColorStop(0,"rgba(255,226,168,.8)");g.addColorStop(1,"rgba(255,226,168,0)");x.fillStyle=g;x.fillRect(0,0,w,h);
-  x.fillStyle="#ffe9c2";x.beginPath();x.arc(w*.62,h*.56,w*.07,0,7);x.fill();
-  x.fillStyle="#5b4b52";x.beginPath();x.moveTo(0,h*.62);x.bezierCurveTo(w*.25,h*.55,w*.45,h*.66,w*.7,h*.6);x.bezierCurveTo(w*.85,h*.57,w*.95,h*.6,w,h*.62);x.lineTo(w,h);x.lineTo(0,h);x.fill();
-  g=x.createLinearGradient(0,h*.66,0,h);g.addColorStop(0,"#3a2c2a");g.addColorStop(1,"#120e0d");x.fillStyle=g;
-  x.beginPath();x.moveTo(0,h*.7);x.bezierCurveTo(w*.3,h*.66,w*.6,h*.74,w,h*.68);x.lineTo(w,h);x.lineTo(0,h);x.fill();
-  x.fillStyle="#0e0b0a";const fx=w*.3,fy=h*.72;x.beginPath();x.arc(fx,fy-h*.2,w*.045,0,7);x.fill();
-  x.beginPath();x.moveTo(fx-w*.09,fy+h*.1);x.bezierCurveTo(fx-w*.09,fy-h*.12,fx-w*.05,fy-h*.16,fx,fy-h*.16);x.bezierCurveTo(fx+w*.05,fy-h*.16,fx+w*.09,fy-h*.12,fx+w*.09,fy+h*.1);x.fill();
-  x.fillStyle="#2f4a3a";x.beginPath();x.arc(w*.88,h*.7,w*.12,0,7);x.fill();
-  x.fillStyle="#3d6b8c";x.fillRect(0,h*.93,w,h*.07);
-  return c;
-}
-
-// ======================================================================
-// Panels
-// ======================================================================
-const fmt=(v,signed)=>{const i=Math.round(v);return signed&&i>0?"+"+i:String(i)};
-const GRAD={temp:"linear-gradient(90deg,#4a7bd8,#e6e0d2,#e8b23a)",tint:"linear-gradient(90deg,#4caf6a,#e6e0d2,#d45db0)",
-  vibrance:"linear-gradient(90deg,#8a8a8a,#e59a3a,#e0493c)",saturation:"linear-gradient(90deg,#7a7a7a,#c77d5a,#e23d3d)",
-  hue:"linear-gradient(90deg,#ff4040,#ffc040,#80ff40,#40ffc0,#4080ff,#c040ff,#ff4040)"};
-function trackFor(v,min,max,grad){
-  if(grad) return grad;
-  const p=(v-min)/(max-min)*100,from=min<0?50:0,lo=Math.min(p,from),hi=Math.max(p,from);
-  return `linear-gradient(90deg,var(--line) ${lo}%,var(--gold) ${lo}%,var(--gold) ${hi}%,var(--line) ${hi}%)`;
-}
-function slider(label,id,v,min,max,onInput,opts={}){
-  const row=document.createElement("div");row.className="row";
-  const signed=min<0,step=opts.step||1,disp=opts.disp||(x=>fmt(x,signed));
-  row.innerHTML=`<label for="s_${id}">${label}</label><input type="range" id="s_${id}" min="${min}" max="${max}" step="${step}" value="${v}"><output>${disp(v)}</output>`;
-  const inp=row.querySelector("input"),out=row.querySelector("output");
-  inp.style.setProperty("--track",trackFor(v,min,max,opts.grad));
-  inp.addEventListener("input",()=>{const x=+inp.value;out.textContent=disp(x);inp.style.setProperty("--track",trackFor(x,min,max,opts.grad));onInput(x);requestRender();});
-  inp.addEventListener("change",commit);
-  if(opts.disabled) inp.disabled=true;
-  return row;
-}
-function chips(items,cur,onPick){const d=document.createElement("div");d.className="sub";
-  items.forEach(([k,label])=>{const b=document.createElement("button");b.className="chip"+(k===cur?" on":"");b.textContent=label;b.onclick=()=>onPick(k);d.appendChild(b);});return d;}
-function label(t){const d=document.createElement("div");d.className="group-label";d.textContent=t;return d;}
-function toggleRow(text,on,onChange){const d=document.createElement("div");d.className="toggle";
-  d.innerHTML=`<span>${text}</span><button class="switch" role="switch" aria-checked="${on}" aria-label="${text}"></button>`;
-  d.querySelector("button").onclick=e=>{const v=e.currentTarget.getAttribute("aria-checked")!=="true";e.currentTarget.setAttribute("aria-checked",v);onChange(v);};return d;}
-
-function applyLook(l){S.lookId=l.id;S.lookName=l.name;S.adj=clone(l.adj);commit();renderPanel();requestRender();}
-function surprise(){
-  const pool=PRESETS.filter(l=>l.id!=="original"&&l.id!==S.lookId); const l=pool[Math.floor(Math.random()*pool.length)];
-  S.strength=Math.round(90+Math.random()*40); lookCat=l.cat; applyLook(l); toast(`🎲 ${l.name} · ${S.strength}%`);
-}
-const CATS=[["movie","🎬 Movie Mood"],["music","🎧 Music Mood"],["cine","Cinematic"],["film","Film"],["mine","My Looks"]];
-function panelLooks(p){
-  const top=document.createElement("div");top.className="footer";top.style.paddingTop="0";top.style.marginBottom="8px";
-  top.innerHTML=`<button class="chip on" id="surprise">🎲 สุ่ม Look</button><span class="sp"></span><span class="note" style="margin:0">${S.lookName}</span>`;
-  p.appendChild(top); top.querySelector("#surprise").onclick=surprise;
-  p.appendChild(slider("ความแรง","strength",S.strength,0,150,v=>{S.strength=v;},{disp:v=>Math.round(v)+"%"}));
-  const cur=allLooks().find(l=>l.id===S.lookId);
-  if(cur&&cur.desc){const dsc=document.createElement("p");dsc.className="note";dsc.style.margin="2px 0 10px";dsc.textContent=cur.desc;p.appendChild(dsc);}
-  p.appendChild(chips(CATS,lookCat,k=>{lookCat=k;renderPanel();}));
-  const list=lookCat==="mine"?mine:PRESETS.filter(l=>l.cat===lookCat);
-  if(!list.length){const n=document.createElement("p");n.className="note";n.textContent="ยังไม่มี Look ของคุณ — ไปที่ ADJUST ปรับสีตามใจ แล้วกด Save Look";p.appendChild(n);return;}
-  const g=document.createElement("div");g.className="looks";
-  list.forEach(l=>{const b=document.createElement("button");b.className="look"+(l.id===S.lookId?" on":"");b.setAttribute("aria-label",l.name);b.title=l.desc||l.name;
-    b.appendChild(thumbFor(l));const s=document.createElement("span");s.textContent=l.name;b.appendChild(s);b.onclick=()=>applyLook(l);
-    if(lookCat==="mine"){const x=document.createElement("span");x.className="del";x.textContent="×";x.title="ลบ";x.style.padding="0";x.style.background="rgba(0,0,0,.6)";x.style.inset="4px 4px auto auto";x.style.width="20px";x.style.textAlign="center";
-      x.onclick=e=>{e.stopPropagation();mine=mine.filter(m=>m.id!==l.id);saveMine();renderPanel();toast(`ลบ "${l.name}" แล้ว`);};b.appendChild(x);}
-    g.appendChild(b);});
-  p.appendChild(g);
-}
-
-function panelAdjust(p){
-  p.appendChild(chips([["light","Light"],["color","Color"],["hsl","HSL"],["grain","Grain"],["effects","Effects"]],adjTab,k=>{adjTab=k;renderPanel();}));
-  const a=S.adj,set=k=>v=>{a[k]=v;};
-  if(adjTab==="light"){[["Exposure","exposure"],["S-Curve","curve"],["Density","density"],["Contrast","contrast"],["Highlights","highlights"],["Shadows","shadows"],["Blacks","blacks"]].forEach(([l,k])=>p.appendChild(slider(l,k,a[k],(k==="curve"||k==="density")?0:-100,100,set(k))));}
-  if(adjTab==="color"){[["Temp","temp"],["Tint","tint"],["Vibrance","vibrance"],["Saturation","saturation"]].forEach(([l,k])=>p.appendChild(slider(l,k,a[k],-100,100,set(k),{grad:GRAD[k]})));}
-  if(adjTab==="hsl"){
-    const names=["Red","Orange","Yellow","Green","Blue","Purple"],cols=["#e5484d","#f08a3a","#f2d046","#4caf6a","#3d7fe0","#9b59d0"];
-    const bd=document.createElement("div");bd.className="bands";
-    cols.forEach((c,i)=>{const b=document.createElement("button");b.className="band"+(i===band?" on":"");b.style.background=c;b.title=names[i];b.setAttribute("aria-label",names[i]);b.onclick=()=>{band=i;renderPanel();};bd.appendChild(b);});
-    p.appendChild(bd);p.appendChild(label(names[band].toUpperCase()));
-    const hb=a.hsl[band];
-    p.appendChild(slider("Hue","h"+band,hb.hue,-100,100,v=>hb.hue=v,{grad:GRAD.hue}));
-    p.appendChild(slider("Saturation","s"+band,hb.sat,-100,100,v=>hb.sat=v));
-    p.appendChild(slider("Luminance","l"+band,hb.lum,-100,100,v=>hb.lum=v));
-  }
-  if(adjTab==="grain"){p.appendChild(slider("Amount","grain",a.grain,0,100,set("grain")));p.appendChild(slider("Size","grainSize",a.grainSize,0,100,set("grainSize")));}
-  if(adjTab==="effects"){
-    [["Halation","halation"],["Bloom","bloom"],["Vignette","vignette"],["Fade","fade"],["Light Leak","lightLeak"]].forEach(([l,k])=>p.appendChild(slider(l,k,a[k],0,100,set(k))));
-    p.appendChild(label("SPLIT TONE"));
-    p.appendChild(slider("Shadow hue","shadowTintHue",a.shadowTintHue,0,360,set("shadowTintHue"),{grad:GRAD.hue,disp:v=>Math.round(v)+"°"}));
-    p.appendChild(slider("Shadow amt","shadowTintAmt",a.shadowTintAmt,0,100,set("shadowTintAmt")));
-    p.appendChild(slider("Midtone hue","midTintHue",a.midTintHue,0,360,set("midTintHue"),{grad:GRAD.hue,disp:v=>Math.round(v)+"°"}));
-    p.appendChild(slider("Midtone amt","midTintAmt",a.midTintAmt,0,100,set("midTintAmt")));
-    p.appendChild(slider("Highlight hue","highlightTintHue",a.highlightTintHue,0,360,set("highlightTintHue"),{grad:GRAD.hue,disp:v=>Math.round(v)+"°"}));
-    p.appendChild(slider("Highlight amt","highlightTintAmt",a.highlightTintAmt,0,100,set("highlightTintAmt")));
-    p.appendChild(toggleRow("Black & White",a.mono,v=>{a.mono=v;commit();requestRender();}));
-  }
-  const f=document.createElement("div");f.className="footer";
-  f.innerHTML=`<button class="chip" id="reset">RESET</button><span class="sp"></span><button class="chip on" id="savelook">SAVE LOOK</button>`;
-  p.appendChild(f);
-  f.querySelector("#reset").onclick=()=>{const l=allLooks().find(x=>x.id===S.lookId);S.adj=clone(l?l.adj:defAdj());commit();renderPanel();requestRender();};
-  f.querySelector("#savelook").onclick=()=>{
-    if(f.querySelector("input"))return;
-    const box=document.createElement("div");box.className="footer";
-    box.innerHTML=`<input class="text" id="lookname" maxlength="28" value="My ${S.lookName.replace(/^My /,"")}" aria-label="ชื่อ Look"><button class="chip on" id="lookok">บันทึก</button>`;
-    p.appendChild(box);box.querySelector("input").focus();
-    box.querySelector("#lookok").onclick=()=>{const name=box.querySelector("input").value.trim()||"My Look";
-      const l={id:"custom_"+Date.now().toString(36),name,cat:"mine",adj:clone(S.adj)};mine.unshift(l);saveMine();S.lookId=l.id;S.lookName=name;commit();
-      toast(`บันทึก "${name}" ใน My Looks แล้ว`);renderPanel();requestRender();};
-  };
-}
-
-const AITOOLS=[["auto","Auto","✦"],["smooth","Smooth","◌"],["tone","Tone","◐"],["brighten","Brighten","☀"],["details","Details","◇"]];
-function panelAI(p){
-  const g=document.createElement("div");g.className="aitools";
-  AITOOLS.forEach(([k,l,ic])=>{const b=document.createElement("button");b.className="aitool"+(k===aiTool?" on":"");b.innerHTML=`<i>${ic}</i>${l}`;b.onclick=()=>{aiTool=k;renderPanel();};g.appendChild(b);});
-  p.appendChild(g);
-  const ai=S.ai;
-  if(aiTool==="auto"){
-    const v=Math.min(100,ai.smooth/.7);
-    p.appendChild(slider("Intensity","ai_auto",v,0,100,x=>{ai.smooth=x*.7;ai.tone=x*.5;ai.brighten=x*.4;ai.details=x*.5;}));
-  } else p.appendChild(slider("Intensity","ai_"+aiTool,ai[aiTool],0,100,x=>{ai[aiTool]=x;}));
-  const f=document.createElement("div");f.className="footer";f.innerHTML=`<button class="chip" id="aireset">RESET</button>`;p.appendChild(f);
-  f.querySelector("#aireset").onclick=()=>{S.ai={smooth:0,tone:0,brighten:0,details:0};commit();renderPanel();requestRender();};
-  const n=document.createElement("p");n.className="note";
-  n.textContent="ทำงานในเบราว์เซอร์ทั้งหมด ไม่อัปโหลดรูป เวอร์ชันเว็บรีทัชจากโทนสีผิว ส่วนแต่งหน้า (ลิป บลัช) และปรับรูปหน้า (หน้าเรียว ตาโต) ที่ต้องตรวจจับใบหน้า มีในแอป Android";
-  p.appendChild(n);
-}
-
-function swatchRow(list,cur,onPick){const d=document.createElement("div");d.className="swatches";
-  list.forEach(([l,c],i)=>{const b=document.createElement("button");b.className="sw"+(i===cur?" on":"");
-    b.innerHTML=`<b style="background:${c||"var(--panel2)"}">${c?"":l.slice(0,4)}</b>${l}`;b.onclick=()=>onPick(i);d.appendChild(b);});return d;}
-function panelSocial(p){
-  const s=S.social;
-  p.appendChild(label("ASPECT"));
-  p.appendChild(chips(ASPECTS.map(([l,r])=>[l,l]),ASPECTS.find(a=>a[1]===s.aspect)[0],k=>{s.aspect=ASPECTS.find(a=>a[0]===k)[1];s.cx=s.cy=.5;commit();renderPanel();requestRender();}));
-  p.appendChild(label("FRAME"));
-  p.appendChild(swatchRow(FRAMES,s.frame,i=>{s.frame=i;commit();renderPanel();requestRender();}));
-  p.appendChild(label("BACKGROUND"));
-  p.appendChild(swatchRow(BGS,s.bg,i=>{s.bg=i;commit();renderPanel();requestRender();}));
-  p.appendChild(label("CAPTION"));
-  const t=document.createElement("input");t.className="text";t.id="caption";t.maxLength=60;t.placeholder="พิมพ์แคปชันบนรูป…";t.value=s.caption;
-  t.oninput=()=>{s.caption=t.value;requestRender();};t.onchange=commit;p.appendChild(t);
-  p.appendChild(label("CINEMA"));
-  p.appendChild(toggleRow("แถบดำโรงหนัง 2.39:1",s.letterbox,v=>{s.letterbox=v;commit();requestRender();}));
-  p.appendChild(toggleRow("แคปชันแบบซับหนัง",s.subtitle,v=>{s.subtitle=v;if(v&&!s.caption){s.caption="บางความรู้สึก… ก็สวยเกินกว่าจะพูดออกมา";renderPanel();}commit();requestRender();}));
-  p.appendChild(toggleRow("วันที่แบบกล้องฟิล์ม",s.date,v=>{s.date=v;commit();requestRender();}));
-  p.appendChild(label("MUSIC CARD"));
-  p.appendChild(toggleRow("การ์ด Now Playing",s.music,v=>{s.music=v;commit();renderPanel();requestRender();}));
-  if(s.music){
-    const mk=(id,ph,key)=>{const t=document.createElement("input");t.className="text";t.id=id;t.maxLength=40;t.placeholder=ph;t.value=s[key];t.style.marginTop="6px";
-      t.oninput=()=>{s[key]=t.value;requestRender();};t.onchange=commit;return t;};
-    p.appendChild(mk("song","ชื่อเพลง","song")); p.appendChild(mk("artist","ศิลปิน","artist"));
-  }
-  p.appendChild(label("WATERMARK"));
-  p.appendChild(toggleRow("Watermark MOODCAM",S.watermark,v=>{S.watermark=v;requestRender();}));
-}
-
-let downloads=null;
-function panelSave(p){
-  const info=document.createElement("p");info.className="note";info.style.marginTop="0";
-  info.textContent=`บันทึกเป็น JPG ความละเอียดเต็ม (${full?full.width+"×"+full.height:"—"} px ก่อนครอป) พร้อม Look, การปรับแต่ง, AI และ Social Studio`;
-  p.appendChild(info);
-  p.appendChild(label("QUALITY"));
-  p.appendChild(chips([[.95,"High"],[.88,"Standard"]],S.quality,k=>{S.quality=k;renderPanel();}));
-  const b=document.createElement("button");b.className="bigbtn";b.id="savebtn";b.textContent="SAVE TO DEVICE";b.onclick=saveFull;p.appendChild(b);
-  if(window.MoodCamAndroid){const sh=document.createElement("button");sh.className="bigbtn ghost";sh.id="sharebtn";sh.textContent="SHARE · IG / TIKTOK / LINE";
-    sh.onclick=()=>{CAM.shareNext=true;saveFull();};p.appendChild(sh);}
-  const n=document.createElement("p");n.className="note";
-  n.textContent="ภาพจะถูกบันทึกลงเครื่องของคุณ แล้วนำไปโพสต์ใน Instagram, TikTok, Facebook หรือ X ได้ตามปกติ — แชร์ตรงไปแอปเหล่านั้นได้ในแอป Android";
-  p.appendChild(n);
-}
-function blobToB64(blob){return new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(String(fr.result).split(",")[1]);fr.readAsDataURL(blob);});}
-async function saveFull(){
-  if(!full)return;$("#busy").hidden=false;await new Promise(r=>setTimeout(r,30));
-  let blob;
-  try{
-    const edited=renderEdit(full);const out=compose(edited,S.social,Math.max(edited.width,edited.height),wmText());
-    blob=await new Promise(r=>out.toBlob(r,"image/jpeg",S.quality));
-  }catch(e){$("#busy").hidden=true;toast("เรนเดอร์ไม่สำเร็จ: รูปอาจใหญ่เกินไปสำหรับเบราว์เซอร์นี้");return;}
-  $("#busy").hidden=true;
-  const name="MoodCam_"+S.lookName.replace(/[^A-Za-z0-9]+/g,"")+"_"+new Date().toISOString().slice(0,19).replace(/[-:T]/g,"")+".jpg";
-  if(window.MoodCamAndroid){
-    const b64=await blobToB64(blob);
-    if(CAM.shareNext){CAM.shareNext=false; if(!window.MoodCamAndroid.shareImage(b64,name)) toast("แชร์ไม่สำเร็จ"); return;}
-    toast(window.MoodCamAndroid.saveImage(b64,name)?"บันทึกลงแกลเลอรีแล้ว (Pictures/MoodCam)":"บันทึกไม่สำเร็จ");return;
-  }
-  if(downloads){
-    try{await downloads.save({filename:name,data:blob});toast("บันทึกรูปแล้ว");return;}
-    catch(e){if(e&&e.code==="declined")return; if(e&&e.code==="rate_limited"){toast("รอสักครู่แล้วลองใหม่");return;}}
-  }
-  // Fallback: show the image so the viewer can long-press / right-click to save it.
-  const url=URL.createObjectURL(blob);const sh=document.createElement("div");sh.className="sheet";
-  sh.innerHTML=`<div><img alt="ภาพที่แต่งแล้ว"><p>กดค้าง (มือถือ) หรือคลิกขวา (คอม) ที่รูปเพื่อบันทึก</p><button class="bigbtn ghost">ปิด</button></div>`;
-  sh.querySelector("img").src=url;sh.querySelector("button").onclick=()=>{sh.remove();URL.revokeObjectURL(url);};document.body.appendChild(sh);
-}
-
-function renderPanel(){
-  const p=$("#panel");p.textContent="";
-  ({looks:panelLooks,adjust:panelAdjust,ai:panelAI,social:panelSocial,save:panelSave})[tab](p);
-}
-$("#tabs").addEventListener("click",e=>{const b=e.target.closest("[data-tab]");if(!b)return;tab=b.dataset.tab;
-  document.querySelectorAll("#tabs [data-tab]").forEach(x=>x.setAttribute("aria-selected",x===b));renderPanel();requestRender();});
-
-// ---------- stage interactions
-const cmp=$("#compare");
-const on=()=>{showOriginal=true;cmp.classList.add("on");requestRender();},off=()=>{if(!showOriginal)return;showOriginal=false;cmp.classList.remove("on");requestRender();};
-cmp.addEventListener("pointerdown",e=>{e.preventDefault();on();});["pointerup","pointerleave","pointercancel"].forEach(t=>cmp.addEventListener(t,off));
-$("#undo").onclick=()=>{if(!hist.undo.length)return;hist.redo.push(hist.last);restore(hist.undo.pop());};
-$("#redo").onclick=()=>{if(!hist.redo.length)return;hist.undo.push(hist.last);restore(hist.redo.pop());};
-let drag=null;const view=$("#view");
-view.addEventListener("pointerdown",e=>{if(tab!=="social"||BGS[S.social.bg][0]!=="Crop"||S.social.aspect===null)return;drag={x:e.clientX,y:e.clientY};view.setPointerCapture(e.pointerId);});
-view.addEventListener("pointermove",e=>{if(!drag)return;const r=view.getBoundingClientRect();
-  S.social.cx=Math.min(1,Math.max(0,S.social.cx-(e.clientX-drag.x)/r.width*.8));S.social.cy=Math.min(1,Math.max(0,S.social.cy-(e.clientY-drag.y)/r.height*.8));
-  drag={x:e.clientX,y:e.clientY};requestRender();});
-view.addEventListener("pointerup",()=>{if(drag){drag=null;commit();}});
-
-let toastT;function toast(m){let t=$(".toast");if(!t){t=document.createElement("div");t.className="toast";t.setAttribute("role","status");document.body.appendChild(t);}
-  t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(()=>t.hidden=true,2600);}
-
-// ======================================================================
-// Live camera (getUserMedia). Works when the page is served over HTTPS on its own
-// site; inside a sandboxed viewer that blocks the camera it falls back to the
-// phone's native camera through the file input.
-// ======================================================================
-const CAM={stream:null,facing:"environment",timer:0,grid:true,torch:false,track:null,zoomCaps:null};
-function liveFilter(a){ // CSS approximation of the look for the viewfinder; the captured photo gets the full kernel
-  const b=Math.pow(2,a.exposure/100*1.5)*(1+a.fade/100*.06)*(1-a.density/100*.18), c=(a.contrast>=0?1+a.contrast/100*.9:1+a.contrast/100*.5)*(1-a.fade/100*.2)*(1-a.blacks/100*.25)*(1+a.curve/100*.35+a.density/100*.15);
-  const s=a.mono?0:Math.max(0,(1+a.saturation/100)*(1+a.vibrance/100*.3));
-  const warm=Math.max(0,a.temp)/100*.45+a.highlightTintAmt/100*.12, hue=-a.tint/100*12+(a.temp<0?a.temp/100*25:0);
-  return `brightness(${b.toFixed(3)}) contrast(${c.toFixed(3)}) saturate(${s.toFixed(3)}) sepia(${warm.toFixed(3)}) hue-rotate(${hue.toFixed(1)}deg)`+(a.mono?" grayscale(1)":"");
-}
-function camApplyLook(){
-  $("#video").style.filter=liveFilter(grade());
-  const v=grade().vignette/100;$("#vfvig").style.background=v>0?`radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,${(v*.65).toFixed(2)}) 100%)`:"none";
-  $("#camtag").textContent="LIVE · "+S.lookName.toUpperCase();
-  const box=$("#camlooks");box.textContent="";
-  allLooks().forEach(l=>{const b=document.createElement("button");b.className="chip"+(l.id===S.lookId?" on":"");b.textContent=l.name;
-    b.onclick=()=>{applyLook(l);camApplyLook();};box.appendChild(b);});
-}
-function cameraAllowedHere(){
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia||!window.isSecureContext) return false;
-  const fp=document.permissionsPolicy||document.featurePolicy;
-  if(fp&&fp.allowsFeature&&!fp.allowsFeature("camera")) return false;
-  return true;
-}
-async function startStream(){
-  stopStream();
-  CAM.stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:CAM.facing},width:{ideal:4096},height:{ideal:3072}}});
-  const v=$("#video");v.srcObject=CAM.stream;await v.play().catch(()=>{});
-  CAM.track=CAM.stream.getVideoTracks()[0];
-  const caps=CAM.track.getCapabilities?CAM.track.getCapabilities():{};
-  const settings=CAM.track.getSettings?CAM.track.getSettings():{};
-  $("#vf").classList.toggle("front",(settings.facingMode||CAM.facing)==="user");
-  $("#camtorch").hidden=!caps.torch;CAM.torch=false;$("#camtorch").classList.remove("on");
-  const z=$("#vfzoom");z.textContent="";CAM.zoomCaps=caps.zoom||null;z.hidden=!CAM.zoomCaps;
-  if(CAM.zoomCaps){[1,2,5].filter(x=>x>=CAM.zoomCaps.min&&x<=CAM.zoomCaps.max).forEach(x=>{const b=document.createElement("button");b.className="chipbtn"+(x===1?" on":"");b.textContent=x+"x";
-    b.onclick=()=>{CAM.track.applyConstraints({advanced:[{zoom:x}]}).catch(()=>{});z.querySelectorAll("button").forEach(o=>o.classList.toggle("on",o===b));};z.appendChild(b);});}
-}
-function stopStream(){if(CAM.stream){CAM.stream.getTracks().forEach(t=>t.stop());CAM.stream=null;CAM.track=null;}}
-async function openCamera(){
-  if(!cameraAllowedHere()){$("#cam").click();return;}
-  try{
-    $("#camsheet").hidden=false;camApplyLook();await startStream();
-  }catch(e){
-    $("#camsheet").hidden=true;stopStream();
-    if(e&&e.name==="NotAllowedError") toast("ไม่ได้รับอนุญาตใช้กล้อง — เปิดสิทธิ์กล้องในการตั้งค่าเบราว์เซอร์ หรือกด ถ่ายรูป อีกครั้งเพื่อใช้แอปกล้องของเครื่อง");
-    else toast("เปิดกล้องสดไม่ได้ในหน้านี้ — กด ถ่ายรูป อีกครั้งเพื่อใช้แอปกล้องของเครื่อง");
-    CAM.fallbackNext=true;
-  }
-}
-function closeCamera(){stopStream();$("#camsheet").hidden=true;}
-async function capture(){
-  const v=$("#video");if(!v.videoWidth)return;
-  if(CAM.timer){const c=$("#vfcount");c.hidden=false;for(let i=CAM.timer;i>0;i--){c.textContent=i;await new Promise(r=>setTimeout(r,1000));}c.hidden=true;}
-  const w=v.videoWidth,h=v.videoHeight,c=document.createElement("canvas");c.width=w;c.height=h;const x=c.getContext("2d");
-  if($("#vf").classList.contains("front")){x.translate(w,0);x.scale(-1,1);}
-  x.drawImage(v,0,0,w,h);
-  const f=$("#vfflash");f.style.opacity=".8";setTimeout(()=>f.style.opacity="0",60);
-  $("#camthumb").style.backgroundImage=`url(${c.toDataURL("image/jpeg",.6)})`;
-  const look=allLooks().find(l=>l.id===S.lookId);
-  setSource(c,"PHOTO");if(look){S.lookId=look.id;S.lookName=look.name;S.adj=clone(look.adj);hist.last=snap();renderPanel();requestRender();}
-  toast(`ถ่ายแล้ว ${w}×${h} · ${S.lookName} — กดรูปเล็กเพื่อไปแต่ง`);
-}
-$("#shoot").onclick=()=>{if(CAM.fallbackNext){CAM.fallbackNext=false;$("#cam").click();return;}openCamera();};
-$("#camclose").onclick=closeCamera;
-$("#camthumb").onclick=()=>{closeCamera();tab="looks";document.querySelectorAll("#tabs [data-tab]").forEach(x=>x.setAttribute("aria-selected",x.dataset.tab==="looks"));renderPanel();requestRender();};
-$("#shutter").onclick=capture;
-$("#camflip").onclick=async()=>{CAM.facing=CAM.facing==="environment"?"user":"environment";try{await startStream();}catch(e){toast("สลับกล้องไม่ได้");}};
-$("#camgrid").onclick=e=>{CAM.grid=!CAM.grid;$("#vfgrid").hidden=!CAM.grid;e.currentTarget.classList.toggle("on",CAM.grid);};
-$("#camtimer").onclick=e=>{CAM.timer=CAM.timer===0?3:CAM.timer===3?10:0;e.currentTarget.textContent=CAM.timer?`Timer ${CAM.timer}s`:"Timer";e.currentTarget.classList.toggle("on",!!CAM.timer);};
-$("#camtorch").onclick=e=>{CAM.torch=!CAM.torch;CAM.track&&CAM.track.applyConstraints({advanced:[{torch:CAM.torch}]}).catch(()=>{});e.currentTarget.classList.toggle("on",CAM.torch);};
-document.addEventListener("visibilitychange",()=>{if(document.hidden&&CAM.stream)closeCamera();});
-
-// ---------- PWA: offline + "install app" button
-if("serviceWorker" in navigator&&location.protocol==="https:"){
-  // updateViaCache:none -> the browser never serves a stale sw.js; reload once when a new version takes over
-  const hadController=!!navigator.serviceWorker.controller;
-  navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).then(r=>{r.update().catch(()=>{});}).catch(()=>{});
-  let reloaded=false;navigator.serviceWorker.addEventListener("controllerchange",()=>{if(hadController&&!reloaded){reloaded=true;location.reload();}});
-}
-let installEvt=null;
-window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvt=e;$("#install").hidden=false;});
-$("#install").onclick=async()=>{if(!installEvt)return;installEvt.prompt();const r=await installEvt.userChoice;installEvt=null;$("#install").hidden=true;if(r.outcome==="accepted")toast("ติดตั้ง MoodCam ลงหน้าจอแล้ว");};
-window.addEventListener("appinstalled",()=>{$("#install").hidden=true;});
-
-if(window.MoodCamAndroid){$("#edition").textContent="FILM CAMERA · APP · v3";}
-// ---------- boot: open with the sample scene and a look applied so the editor is live
-setSource(sampleScene(),"SAMPLE");
-applyLook(PRESETS.find(l=>l.id==="neon_2049"));
-hist.undo=[];hist.last=snap();syncHist();
-if(window.claude&&window.claude.use){window.claude.use("downloads").then(d=>{downloads=d;}).catch(()=>{});}
-</script>
-
+<script src="vendor/piexif.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script type="module" src="js/app.js?v=4"></script>
 </body>
 </html>
