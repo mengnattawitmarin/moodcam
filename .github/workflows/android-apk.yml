@@ -1,0 +1,41 @@
+name: Build MoodCam APK
+
+on:
+  push:
+    branches: [main]
+    paths: ["android/**", ".github/workflows/android-apk.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - name: Build signed APK
+        run: gradle -p android assembleRelease --no-daemon --stacktrace
+      - name: Rename
+        run: cp android/app/build/outputs/apk/release/app-release.apk MoodCam.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MoodCam-apk
+          path: MoodCam.apk
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: MoodCam APK (build ${{ github.run_number }})
+          body: |
+            ดาวน์โหลด MoodCam.apk ด้านล่าง แล้วแตะเพื่อติดตั้ง (อนุญาต "ติดตั้งแอปที่ไม่รู้จัก")
+            แอปโหลด MoodCam จาก https://mengnattawitmarin.github.io/moodcam/ จึงอัปเดตเองเมื่อเว็บอัปเดต
+          files: MoodCam.apk
+          make_latest: true

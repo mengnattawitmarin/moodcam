@@ -1,0 +1,36 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.moodcam.web'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.moodcam.web'
+        minSdk 29
+        targetSdk 35
+        versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1') as Integer)
+        versionName "3.0." + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
+    }
+    signingConfigs {
+        // Test-only key kept in the repo so every build can be installed over the previous one.
+        moodcam {
+            storeFile file('moodcam-test.jks')
+            storePassword 'moodcam-test'
+            keyAlias 'moodcam'
+            keyPassword 'moodcam-test'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.moodcam
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.13.1'
+}

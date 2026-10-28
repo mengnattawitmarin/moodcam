@@ -141,7 +141,7 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 
 <div class="app">
   <header>
-    <div class="brand"><b>MOODCAM</b><small>FILM EDITOR · WEB · v3</small></div>
+    <div class="brand"><b>MOODCAM</b><small id="edition">FILM EDITOR · WEB · v3</small></div>
     <button class="hbtn" id="install" hidden>ติดตั้งแอป</button>
     <button class="hbtn primary" id="shoot" title="เปิดกล้อง">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>ถ่ายรูป</button>
@@ -709,10 +709,13 @@ function panelSave(p){
   p.appendChild(label("QUALITY"));
   p.appendChild(chips([[.95,"High"],[.88,"Standard"]],S.quality,k=>{S.quality=k;renderPanel();}));
   const b=document.createElement("button");b.className="bigbtn";b.id="savebtn";b.textContent="SAVE TO DEVICE";b.onclick=saveFull;p.appendChild(b);
+  if(window.MoodCamAndroid){const sh=document.createElement("button");sh.className="bigbtn ghost";sh.id="sharebtn";sh.textContent="SHARE · IG / TIKTOK / LINE";
+    sh.onclick=()=>{CAM.shareNext=true;saveFull();};p.appendChild(sh);}
   const n=document.createElement("p");n.className="note";
   n.textContent="ภาพจะถูกบันทึกลงเครื่องของคุณ แล้วนำไปโพสต์ใน Instagram, TikTok, Facebook หรือ X ได้ตามปกติ — แชร์ตรงไปแอปเหล่านั้นได้ในแอป Android";
   p.appendChild(n);
 }
+function blobToB64(blob){return new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(String(fr.result).split(",")[1]);fr.readAsDataURL(blob);});}
 async function saveFull(){
   if(!full)return;$("#busy").hidden=false;await new Promise(r=>setTimeout(r,30));
   let blob;
@@ -722,6 +725,11 @@ async function saveFull(){
   }catch(e){$("#busy").hidden=true;toast("เรนเดอร์ไม่สำเร็จ: รูปอาจใหญ่เกินไปสำหรับเบราว์เซอร์นี้");return;}
   $("#busy").hidden=true;
   const name="MoodCam_"+S.lookName.replace(/[^A-Za-z0-9]+/g,"")+"_"+new Date().toISOString().slice(0,19).replace(/[-:T]/g,"")+".jpg";
+  if(window.MoodCamAndroid){
+    const b64=await blobToB64(blob);
+    if(CAM.shareNext){CAM.shareNext=false; if(!window.MoodCamAndroid.shareImage(b64,name)) toast("แชร์ไม่สำเร็จ"); return;}
+    toast(window.MoodCamAndroid.saveImage(b64,name)?"บันทึกลงแกลเลอรีแล้ว (Pictures/MoodCam)":"บันทึกไม่สำเร็จ");return;
+  }
   if(downloads){
     try{await downloads.save({filename:name,data:blob});toast("บันทึกรูปแล้ว");return;}
     catch(e){if(e&&e.code==="declined")return; if(e&&e.code==="rate_limited"){toast("รอสักครู่แล้วลองใหม่");return;}}
@@ -841,6 +849,7 @@ window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvt=
 $("#install").onclick=async()=>{if(!installEvt)return;installEvt.prompt();const r=await installEvt.userChoice;installEvt=null;$("#install").hidden=true;if(r.outcome==="accepted")toast("ติดตั้ง MoodCam ลงหน้าจอแล้ว");};
 window.addEventListener("appinstalled",()=>{$("#install").hidden=true;});
 
+if(window.MoodCamAndroid){$("#edition").textContent="FILM CAMERA · APP · v3";}
 // ---------- boot: open with the sample scene and a look applied so the editor is live
 setSource(sampleScene(),"SAMPLE");
 applyLook(PRESETS.find(l=>l.id==="neon_2049"));

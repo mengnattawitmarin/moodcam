@@ -1,0 +1,9 @@
+<resources>
+    <style name="MoodCamTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#0B0C0A</item>
+        <item name="android:statusBarColor">#0B0C0A</item>
+        <item name="android:navigationBarColor">#0B0C0A</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:colorAccent">#D89A36</item>
+    </style>
+</resources>
