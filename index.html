@@ -4,6 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#0b0c0a">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MoodCam">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
 </head>
 <body>
@@ -135,6 +142,7 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 <div class="app">
   <header>
     <div class="brand"><b>MOODCAM</b><small>FILM EDITOR · WEB</small></div>
+    <button class="hbtn" id="install" hidden>ติดตั้งแอป</button>
     <button class="hbtn primary" id="shoot" title="เปิดกล้อง">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>ถ่ายรูป</button>
     <label class="hbtn" for="pick">
@@ -689,6 +697,13 @@ $("#camgrid").onclick=e=>{CAM.grid=!CAM.grid;$("#vfgrid").hidden=!CAM.grid;e.cur
 $("#camtimer").onclick=e=>{CAM.timer=CAM.timer===0?3:CAM.timer===3?10:0;e.currentTarget.textContent=CAM.timer?`Timer ${CAM.timer}s`:"Timer";e.currentTarget.classList.toggle("on",!!CAM.timer);};
 $("#camtorch").onclick=e=>{CAM.torch=!CAM.torch;CAM.track&&CAM.track.applyConstraints({advanced:[{torch:CAM.torch}]}).catch(()=>{});e.currentTarget.classList.toggle("on",CAM.torch);};
 document.addEventListener("visibilitychange",()=>{if(document.hidden&&CAM.stream)closeCamera();});
+
+// ---------- PWA: offline + "install app" button
+if("serviceWorker" in navigator&&location.protocol==="https:"){navigator.serviceWorker.register("sw.js").catch(()=>{});}
+let installEvt=null;
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installEvt=e;$("#install").hidden=false;});
+$("#install").onclick=async()=>{if(!installEvt)return;installEvt.prompt();const r=await installEvt.userChoice;installEvt=null;$("#install").hidden=true;if(r.outcome==="accepted")toast("ติดตั้ง MoodCam ลงหน้าจอแล้ว");};
+window.addEventListener("appinstalled",()=>{$("#install").hidden=true;});
 
 // ---------- boot: open with the sample scene and a look applied so the editor is live
 setSource(sampleScene(),"SAMPLE");
