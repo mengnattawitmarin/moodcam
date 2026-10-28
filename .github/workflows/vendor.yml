@@ -1,0 +1,46 @@
+name: Vendor third-party libraries
+
+on:
+  push:
+    branches: [main]
+    paths: ["vendor/REQUEST", ".github/workflows/vendor.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Fetch libraries and models
+        run: |
+          set -e
+          mkdir -p /tmp/v && cd /tmp/v
+          npm pack @mediapipe/tasks-vision@0.10.14 piexifjs@1.0.6 qrcode-generator@1.4.4
+          for f in *.tgz; do mkdir -p "x_$f"; tar -xzf "$f" -C "x_$f"; done
+          cd "$GITHUB_WORKSPACE"
+          rm -rf vendor/mediapipe vendor/models
+          mkdir -p vendor/mediapipe/wasm vendor/models
+          MP=$(ls -d /tmp/v/x_mediapipe-tasks-vision-*/package)
+          cp "$MP/vision_bundle.mjs" vendor/mediapipe/
+          cp "$MP"/wasm/vision_wasm_internal.* vendor/mediapipe/wasm/
+          cp "$MP/package.json" vendor/mediapipe/
+          cp /tmp/v/x_piexifjs-*/package/piexif.js vendor/piexif.js
+          cp /tmp/v/x_qrcode-generator-*/package/qrcode.js vendor/qrcode.js
+          curl -fsSL -o vendor/models/face_landmarker.task \
+            https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task
+          curl -fsSL -o vendor/models/selfie_multiclass_256x256.tflite \
+            https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_multiclass_256x256/float32/latest/selfie_multiclass_256x256.tflite || true
+          ls -laR vendor | head -40
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A vendor
+          git commit -m "Vendor MediaPipe tasks-vision 0.10.14, face model, piexifjs, qrcode-generator" || echo "nothing to commit"
+          git push origin HEAD:main
