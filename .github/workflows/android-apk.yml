@@ -25,6 +25,16 @@ jobs:
         run: gradle -p android assembleRelease --no-daemon --stacktrace
       - name: Rename
         run: cp android/app/build/outputs/apk/release/app-release.apk MoodCam.apk
+      - name: Publish APK on GitHub Pages (same site as the app, direct download)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git pull --ff-only origin main
+          cp MoodCam.apk ./MoodCam-download.apk
+          mv MoodCam-download.apk MoodCam.apk.tmp && mv MoodCam.apk.tmp MoodCam.apk
+          git add -f MoodCam.apk
+          git commit -m "APK build ${{ github.run_number }}" || echo "no change"
+          git push origin HEAD:main
       - uses: actions/upload-artifact@v4
         with:
           name: MoodCam-apk
