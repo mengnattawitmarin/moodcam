@@ -206,89 +206,159 @@ input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;bac
 <script>
 "use strict";
 // ======================================================================
-// Model — same presets and parameters as the Android app (imaging/Model.kt)
+// Model — looks are plain parameter sets; the same engine renders preview + export
 // ======================================================================
 const ZERO_HSL = () => [0,1,2,3,4,5].map(() => ({hue:0, sat:0, lum:0}));
-const defAdj = () => ({exposure:0,contrast:0,highlights:0,shadows:0,temp:0,tint:0,vibrance:0,saturation:0,hsl:ZERO_HSL(),
-  grain:0,grainSize:30,vignette:0,fade:0,lightLeak:0,shadowTintHue:200,shadowTintAmt:0,highlightTintHue:35,highlightTintAmt:0,mono:false});
+const defAdj = () => ({exposure:0,contrast:0,highlights:0,shadows:0,blacks:0,temp:0,tint:0,vibrance:0,saturation:0,hsl:ZERO_HSL(),
+  grain:0,grainSize:30,vignette:0,fade:0,lightLeak:0,halation:0,bloom:0,
+  shadowTintHue:200,shadowTintAmt:0,midTintHue:40,midTintAmt:0,highlightTintHue:35,highlightTintAmt:0,mono:false});
 const A = o => Object.assign(defAdj(), o);
 const hsl6 = arr => arr.map(b => Object.assign({hue:0,sat:0,lum:0}, b));
+const H = (o) => hsl6([o.red||{},o.orange||{},o.yellow||{},o.green||{},o.blue||{},o.purple||{}]);
+const L = (id,name,cat,desc,adj) => ({id,name,cat,desc,adj:A(adj)});
 const PRESETS = [
-  {id:"original",name:"Original",cat:"film",adj:A({})},
-  {id:"warm_film",name:"Warm Film",cat:"film",adj:A({temp:12,tint:6,vibrance:18,saturation:-4,contrast:8,fade:12,grain:18,vignette:15,highlightTintHue:38,highlightTintAmt:25,shadowTintHue:20,shadowTintAmt:10})},
-  {id:"vintage",name:"Vintage",cat:"film",adj:A({temp:10,saturation:-25,contrast:-6,fade:30,grain:35,vignette:30,highlightTintHue:50,highlightTintAmt:30,shadowTintHue:320,shadowTintAmt:18})},
-  {id:"night_film",name:"Night Film",cat:"film",adj:A({exposure:-5,temp:-14,tint:8,contrast:16,saturation:6,grain:22,vignette:25,shadowTintHue:195,shadowTintAmt:35,highlightTintHue:30,highlightTintAmt:25})},
-  {id:"teal_orange",name:"Teal & Orange",cat:"film",adj:A({contrast:14,vibrance:12,shadowTintHue:190,shadowTintAmt:50,highlightTintHue:30,highlightTintAmt:45,hsl:hsl6([{},{sat:15},{hue:-20},{hue:40,sat:-30},{hue:-15,sat:10},{}])})},
-  {id:"bw_film",name:"B&W Film",cat:"film",adj:A({mono:true,contrast:25,grain:30,vignette:20,fade:8})},
-  {id:"golden_hour",name:"Golden Hour",cat:"film",adj:A({temp:30,tint:4,exposure:5,vibrance:15,highlights:-10,lightLeak:25,highlightTintHue:40,highlightTintAmt:30})},
-  {id:"soft_portrait",name:"Soft Portrait",cat:"film",adj:A({exposure:6,contrast:-10,shadows:15,temp:6,saturation:-8,fade:15,highlightTintHue:25,highlightTintAmt:15})},
-  {id:"amber_drama",name:"Amber Drama",cat:"cine",adj:A({temp:22,contrast:22,shadows:-10,highlights:-15,saturation:-8,vignette:35,highlightTintHue:35,highlightTintAmt:40,shadowTintHue:25,shadowTintAmt:15})},
-  {id:"neon_after_dark",name:"Neon After Dark",cat:"cine",adj:A({temp:-18,tint:14,contrast:18,vibrance:25,grain:15,shadowTintHue:260,shadowTintAmt:40,highlightTintHue:320,highlightTintAmt:25})},
-  {id:"dream_pop",name:"Dream Pop",cat:"cine",adj:A({exposure:8,contrast:-15,fade:25,temp:6,tint:10,vibrance:10,lightLeak:30,highlightTintHue:330,highlightTintAmt:25})},
-  {id:"mono_noir",name:"Mono Noir",cat:"cine",adj:A({mono:true,contrast:45,shadows:-20,highlights:10,grain:40,vignette:45})},
-  {id:"indie_film",name:"Indie Film",cat:"cine",adj:A({temp:8,saturation:-15,fade:22,contrast:6,grain:25,shadowTintHue:170,shadowTintAmt:25,highlightTintHue:45,highlightTintAmt:20})},
-  {id:"bleach_bypass",name:"Bleach Bypass",cat:"cine",adj:A({saturation:-45,contrast:35,highlights:-10,grain:15})},
-  {id:"blockbuster",name:"Blockbuster",cat:"cine",adj:A({contrast:20,vibrance:10,shadowTintHue:185,shadowTintAmt:60,highlightTintHue:28,highlightTintAmt:50,vignette:30})},
-  {id:"rainy_city",name:"Rainy City",cat:"cine",adj:A({temp:-22,saturation:-20,contrast:10,fade:18,shadowTintHue:210,shadowTintAmt:30,grain:20})},
+  // ---------------- FILM: classic stocks, now with real filmic contrast + halation
+  L("original","Original","film","ภาพต้นฉบับ ไม่ปรับสี",{}),
+  L("warm_film","Warm Film","film","ฟิล์มอุ่นแดดบ่าย ผิวสวย ไฮไลต์ทองฟุ้ง",{temp:18,tint:6,vibrance:22,saturation:4,contrast:28,blacks:-12,highlights:-12,fade:8,grain:20,vignette:22,halation:22,highlightTintHue:38,highlightTintAmt:40,shadowTintHue:15,shadowTintAmt:18,hsl:H({orange:{sat:10,lum:6}})}),
+  L("vintage","Vintage","film","ฟิล์มเก่าซีดหวาน ดำยกตัว เม็ดเกรนชัด",{temp:14,saturation:-22,contrast:12,fade:34,grain:38,vignette:34,highlightTintHue:48,highlightTintAmt:40,shadowTintHue:330,shadowTintAmt:26,halation:12}),
+  L("night_film","Night Film","film","ฟิล์มกลางคืน เงาฟ้าเขียว ไฟถนนส้มเรือง",{exposure:-6,temp:-12,tint:6,contrast:38,blacks:-22,saturation:12,grain:26,vignette:30,halation:45,bloom:15,shadowTintHue:195,shadowTintAmt:55,highlightTintHue:30,highlightTintAmt:45}),
+  L("teal_orange","Teal & Orange","film","สูตรหนังฮอลลีวูด เงาเขียวน้ำทะเล ผิวส้ม",{contrast:34,blacks:-15,vibrance:18,saturation:8,shadowTintHue:188,shadowTintAmt:70,highlightTintHue:30,highlightTintAmt:60,hsl:H({orange:{sat:22},yellow:{hue:-25},green:{hue:45,sat:-35},blue:{hue:-15,sat:20}})}),
+  L("bw_film","B&W Film","film","ขาวดำฟิล์ม คอนทราสต์แน่น เกรนสวย",{mono:true,contrast:42,blacks:-18,grain:34,vignette:26,fade:6,halation:10}),
+  L("golden_hour","Golden Hour","film","แสงทองตอนเย็น อบอุ่น ฟุ้งละมุน",{temp:34,tint:6,exposure:4,vibrance:22,contrast:18,highlights:-18,lightLeak:30,bloom:25,highlightTintHue:40,highlightTintAmt:45,shadowTintHue:20,shadowTintAmt:15}),
+  L("soft_portrait","Soft Portrait","film","ถ่ายคนผิวเนียนสว่าง โทนครีมนุ่ม",{exposure:8,contrast:6,shadows:18,temp:8,tint:4,saturation:-6,fade:14,bloom:18,highlightTintHue:25,highlightTintAmt:22,hsl:H({orange:{lum:10,sat:-6},red:{sat:-8}})}),
+  // ---------------- CINEMATIC: graded like a feature film
+  L("amber_drama","Amber Drama","cine","ดราม่าอำพัน ดำลึก ไฮไลต์ทองหนัก",{temp:24,contrast:46,blacks:-28,shadows:-8,highlights:-20,saturation:-6,vignette:42,halation:30,highlightTintHue:35,highlightTintAmt:60,shadowTintHue:25,shadowTintAmt:25,grain:16}),
+  L("neon_after_dark","Neon After Dark","cine","เมืองกลางคืนนีออน ม่วงชมพู ไฟเรือง",{temp:-18,tint:7,contrast:40,blacks:-20,vibrance:32,saturation:10,bloom:35,halation:20,grain:16,shadowTintHue:262,shadowTintAmt:60,highlightTintHue:322,highlightTintAmt:40}),
+  L("dream_pop","Dream Pop","cine","ฝันพาสเทล ฟุ้งนุ่ม แสงรั่วชมพู",{exposure:10,contrast:-4,fade:24,temp:6,tint:12,vibrance:14,lightLeak:34,bloom:35,highlightTintHue:330,highlightTintAmt:38,shadowTintHue:220,shadowTintAmt:18}),
+  L("mono_noir","Mono Noir","cine","ฟิล์มนัวร์ ดำทะมึน แสงเงาแรง",{mono:true,contrast:70,blacks:-35,highlights:10,grain:42,vignette:55,halation:15}),
+  L("indie_film","Indie Film","cine","หนังอินดี้ เขียวหม่น ผิวอุ่น เงียบ ๆ",{temp:8,saturation:-16,fade:20,contrast:22,blacks:-6,grain:26,shadowTintHue:165,shadowTintAmt:40,highlightTintHue:45,highlightTintAmt:30,hsl:H({green:{hue:-15,sat:-20}})}),
+  L("bleach_bypass","Bleach Bypass","cine","สีซีดโลหะ คอนทราสต์จัด แบบหนังสงคราม",{saturation:-50,contrast:62,blacks:-25,highlights:-12,grain:20,vignette:30,shadowTintHue:200,shadowTintAmt:15}),
+  L("blockbuster","Blockbuster","cine","บล็อกบัสเตอร์ ฟ้า-ส้มจัดจ้าน",{contrast:48,blacks:-22,vibrance:18,saturation:10,shadowTintHue:186,shadowTintAmt:80,highlightTintHue:28,highlightTintAmt:65,vignette:34,halation:18}),
+  L("rainy_city","Rainy City","cine","เมืองฝนตก ฟ้าหม่น เย็นเหงา",{temp:-24,saturation:-24,contrast:26,blacks:-10,fade:16,shadowTintHue:210,shadowTintAmt:45,midTintHue:200,midTintAmt:15,grain:22,vignette:25}),
+  // ---------------- MOVIE MOOD: colour inspired by famous films
+  L("neo_code","Neo Code","movie","เขียวดิจิทัลแบบหนังไซไฟ The Matrix",{temp:-12,tint:-38,contrast:52,blacks:-30,saturation:-18,shadowTintHue:140,shadowTintAmt:70,midTintHue:120,midTintAmt:25,highlightTintHue:95,highlightTintAmt:35,grain:14,vignette:30,hsl:H({green:{sat:25},yellow:{hue:20}})}),
+  L("in_the_mood","In the Mood","movie","แดงเขียวโรแมนติก แบบหนังหว่องกาไว",{temp:10,saturation:22,vibrance:10,contrast:38,blacks:-20,shadowTintHue:160,shadowTintAmt:45,highlightTintHue:15,highlightTintAmt:50,vignette:45,grain:26,halation:40,hsl:H({red:{sat:30,lum:-6},green:{hue:-20,sat:10}})}),
+  L("neon_2049","Neon 2049","movie","หมอกส้มอนาคต แบบ Blade Runner 2049",{temp:46,tint:6,contrast:30,blacks:-18,highlights:-24,saturation:-12,fade:10,bloom:45,highlightTintHue:30,highlightTintAmt:75,shadowTintHue:18,shadowTintAmt:35,midTintHue:28,midTintAmt:25}),
+  L("desert_spice","Desert Spice","movie","ทะเลทรายทองซีด แบบหนัง Dune",{temp:30,saturation:-38,contrast:36,blacks:-18,fade:8,highlightTintHue:40,highlightTintAmt:50,shadowTintHue:25,shadowTintAmt:35,midTintHue:35,midTintAmt:20,grain:12,vignette:28}),
+  L("moonlit","Moonlit Blue","movie","น้ำเงินม่วงยามค่ำ แบบหนัง Moonlight",{temp:-26,tint:6,saturation:18,contrast:34,blacks:-14,shadowTintHue:232,shadowTintAmt:65,highlightTintHue:300,highlightTintAmt:30,bloom:20,hsl:H({blue:{sat:35},purple:{sat:25},orange:{sat:10}})}),
+  L("fury_road","Fury Road","movie","ส้มฟ้าสุดขั้ว แบบ Mad Max: Fury Road",{contrast:60,blacks:-28,saturation:32,vibrance:22,shadowTintHue:190,shadowTintAmt:90,highlightTintHue:28,highlightTintAmt:80,vignette:30,hsl:H({orange:{sat:35},blue:{sat:30}})}),
+  L("paris_cafe","Paris Café","movie","เขียว-แดงอบอุ่นแบบหนัง Amélie",{temp:16,tint:-12,saturation:26,contrast:28,blacks:-10,highlightTintHue:50,highlightTintAmt:40,shadowTintHue:120,shadowTintAmt:25,vignette:40,halation:20,hsl:H({green:{hue:-30,sat:22},red:{sat:32},yellow:{sat:15}})}),
+  L("pastel_hotel","Pastel Hotel","movie","พาสเทลชมพูสมมาตร แบบ Grand Budapest Hotel",{exposure:8,contrast:8,fade:18,tint:20,saturation:14,highlightTintHue:340,highlightTintAmt:40,shadowTintHue:200,shadowTintAmt:20,hsl:H({red:{hue:10,lum:8},purple:{sat:15}})}),
+  L("city_of_stars","City of Stars","movie","ม่วงฟ้าโพล้เพล้ แบบ La La Land",{tint:9,temp:-6,saturation:28,contrast:30,blacks:-12,shadowTintHue:250,shadowTintAmt:60,highlightTintHue:320,highlightTintAmt:40,bloom:35,hsl:H({blue:{sat:20},yellow:{sat:20}})}),
+  L("night_drive","Night Drive","movie","ชมพูแมเจนต้ากลางคืน แบบหนัง Drive",{tint:12,temp:-14,contrast:44,blacks:-24,saturation:12,shadowTintHue:212,shadowTintAmt:55,highlightTintHue:330,highlightTintAmt:55,halation:35,bloom:25,grain:14}),
+  L("sin_noir","Sin Noir","movie","ขาวดำจัดจ้าน แบบ Sin City",{mono:true,contrast:85,blacks:-45,highlights:15,grain:38,vignette:55}),
+  L("gotham_stairs","Gotham Stairs","movie","เขียวเหลืองหม่นบนบันได แบบหนัง Joker",{temp:12,tint:-16,saturation:-8,contrast:38,blacks:-16,shadowTintHue:160,shadowTintAmt:50,highlightTintHue:50,highlightTintAmt:45,grain:26,vignette:35,hsl:H({orange:{sat:15},red:{sat:20}})}),
+  L("retro_70s","Retro 70s","movie","ฟิล์มยุค 70 อิ่มสี อุ่นซีด",{temp:22,saturation:20,contrast:20,fade:22,highlightTintHue:42,highlightTintAmt:40,shadowTintHue:12,shadowTintAmt:22,grain:34,vignette:28,hsl:H({red:{sat:20},orange:{sat:15},blue:{hue:15,sat:-15}})}),
+  // ---------------- MUSIC MOOD: colour that feels like a genre
+  L("lofi","Lo-fi Beats","music","นั่งชิลฟังโลไฟ สีซีดอุ่น เกรนนุ่ม",{fade:32,saturation:-20,temp:12,tint:8,grain:38,contrast:8,highlightTintHue:35,highlightTintAmt:32,shadowTintHue:250,shadowTintAmt:22,vignette:28}),
+  L("city_pop","City Pop 80s","music","ซิตี้ป๊อปยุค 80 ชมพูฟ้า ฟุ้งเรโทร",{tint:7,temp:4,saturation:26,vibrance:12,contrast:16,bloom:35,fade:10,highlightTintHue:330,highlightTintAmt:40,shadowTintHue:220,shadowTintAmt:40,grain:16}),
+  L("synthwave","Synthwave","music","ซินธ์เวฟนีออนม่วงชมพูสุดจัด",{tint:16,temp:-22,contrast:44,blacks:-20,saturation:38,shadowTintHue:270,shadowTintAmt:80,highlightTintHue:318,highlightTintAmt:65,bloom:45,halation:25,vignette:30}),
+  L("kpop_candy","K-Pop Candy","music","เคป๊อปสดใส ผิวใส สีลูกกวาด",{exposure:12,contrast:14,saturation:22,vibrance:32,tint:10,highlights:-18,shadows:16,bloom:22,highlightTintHue:340,highlightTintAmt:22,hsl:H({orange:{lum:10},red:{sat:15},blue:{sat:20}})}),
+  L("jazz_club","Jazz Club","music","แจ๊สคลับควันบุหรี่ ดำลึก ไฟอำพัน",{temp:26,contrast:52,blacks:-34,saturation:-14,highlightTintHue:35,highlightTintAmt:60,shadowTintHue:20,shadowTintAmt:20,vignette:60,grain:32,halation:35}),
+  L("indie_folk","Indie Folk","music","อินดี้โฟล์ค ธรรมชาติ หม่นอุ่น",{temp:16,saturation:-18,fade:20,tint:-6,contrast:18,highlightTintHue:45,highlightTintAmt:30,shadowTintHue:100,shadowTintAmt:25,grain:22,hsl:H({green:{hue:-20,sat:-15}})}),
+  L("rnb_velvet","R&B Velvet","music","อาร์แอนด์บีกำมะหยี่ ม่วงแดงหรูหรา",{temp:10,tint:8,contrast:40,blacks:-24,saturation:12,shadowTintHue:300,shadowTintAmt:55,highlightTintHue:20,highlightTintAmt:45,bloom:22,vignette:40}),
+  L("grunge_90s","Grunge 90s","music","กรันจ์ยุค 90 สีซีดสกปรก เกรนหนัก",{saturation:-38,contrast:44,blacks:-14,tint:-12,temp:-6,shadowTintHue:140,shadowTintAmt:35,grain:60,vignette:45,fade:10}),
+  L("bossa_summer","Bossa Summer","music","บอสซาโนวาหน้าร้อน แดดจ้าสดชื่น",{temp:22,exposure:8,vibrance:28,contrast:18,highlights:-18,lightLeak:32,highlightTintHue:45,highlightTintAmt:32,hsl:H({blue:{sat:25,hue:-10},yellow:{sat:15}})}),
+  L("luk_thung","Luk Thung Gold","music","ลูกทุ่งทองอร่าม อุ่นสด เวทีไฟวิบวับ",{temp:36,saturation:22,contrast:30,blacks:-12,highlightTintHue:45,highlightTintAmt:60,bloom:30,halation:25,vignette:32,hsl:H({red:{sat:20},yellow:{sat:25}})}),
 ];
 const clone = o => JSON.parse(JSON.stringify(o));
 const isIdentity = a => JSON.stringify(a) === JSON.stringify(defAdj());
+// Look strength: scale every amount (not hues / grain size) by s; 1 = as designed.
+const NO_SCALE = new Set(["grainSize","shadowTintHue","midTintHue","highlightTintHue","mono","hsl"]);
+function effective(a,s){
+  if(s===1) return a;
+  const o=clone(a);
+  for(const k in o){ if(!NO_SCALE.has(k)&&typeof o[k]==="number") o[k]*=s; }
+  o.hsl=o.hsl.map(b=>({hue:b.hue*s,sat:b.sat*s,lum:b.lum*s}));
+  if(s<0.35) o.mono=false;
+  return o;
+}
 
-function loadMine(){ try { return JSON.parse(localStorage.getItem("moodcam.looks") || "[]"); } catch(e){ return []; } }
+function loadMine(){ try { return JSON.parse(localStorage.getItem("moodcam.looks") || "[]").map(l=>Object.assign(l,{adj:A(l.adj)})); } catch(e){ return []; } }
 function saveMine(){ try { localStorage.setItem("moodcam.looks", JSON.stringify(mine)); } catch(e){} }
 let mine = loadMine();
 const allLooks = () => mine.concat(PRESETS);
 
 // ======================================================================
-// Colour kernel — a direct port of AdjustKernel (ImageProcessor.kt)
+// Colour engine: filmic tone curve, split/3-way grading, HSL, halation, bloom, grain
 // ======================================================================
 const CENTERS=[0,30,60,120,220,290], SPANS=[30,30,40,60,60,50];
 function hsvToRgb(h,s,v,out){const c=v*s,hp=h/60,x=c*(1-Math.abs(hp%2-1)),m=v-c;let r,g,b;
   switch(hp|0){case 0:r=c;g=x;b=0;break;case 1:r=x;g=c;b=0;break;case 2:r=0;g=c;b=x;break;case 3:r=0;g=x;b=c;break;case 4:r=x;g=0;b=c;break;default:r=c;g=0;b=x;}
   out[0]=r+m;out[1]=g+m;out[2]=b+m;}
-function tintOffset(hue,amt){ if(amt<=0) return [0,0,0]; const o=[0,0,0]; hsvToRgb(((hue%360)+360)%360,1,1,o);
-  const avg=(o[0]+o[1]+o[2])/3,k=amt/100*0.22; return [(o[0]-avg)*k,(o[1]-avg)*k,(o[2]-avg)*k]; }
+function tintOffset(hue,amt,k0=0.26){ if(amt<=0) return [0,0,0]; const o=[0,0,0]; hsvToRgb(((hue%360)+360)%360,1,1,o);
+  const avg=(o[0]+o[1]+o[2])/3,k=amt/100*k0; return [(o[0]-avg)*k,(o[1]-avg)*k,(o[2]-avg)*k]; }
 const smooth=(e0,e1,x)=>{let t=(x-e0)/(e1-e0);t=t<0?0:t>1?1:t;return t*t*(3-2*t)};
 function hash(x,y){let h=(Math.imul(x,374761393)+Math.imul(y,668265263)+1337)|0;h=Math.imul(h^(h>>>13),1274126177);h^=h>>>16;return (h&0xFFFF)/32767.5-1;}
 
 function applyAdjust(d,w,h,a){
   if(isIdentity(a)) return;
   const expMul=Math.pow(2,a.exposure/100*1.5),t=a.temp/100,ti=a.tint/100;
-  const rM=expMul*(1+.16*t)*(1+.05*ti), gM=expMul*(1-.12*ti), bM=expMul*(1-.16*t)*(1+.05*ti);
+  const rM=expMul*(1+.18*t)*(1+.06*ti), gM=expMul*(1-.14*ti), bM=expMul*(1-.18*t)*(1+.06*ti);
   const sh=a.shadows/100,hi=a.highlights/100,shOn=sh!==0||hi!==0;
-  const cM=a.contrast>=0?1+a.contrast/100*.7:1+a.contrast/100*.5, cOn=a.contrast!==0;
-  const satM=1+a.saturation/100, vib=a.vibrance/100*.8, satOn=a.saturation!==0||a.vibrance!==0;
-  const bh=a.hsl.map(b=>b.hue),bs=a.hsl.map(b=>b.sat),bl=a.hsl.map(b=>b.lum),hslOn=a.hsl.some(b=>b.hue||b.sat||b.lum);
-  const sT=tintOffset(a.shadowTintHue,a.shadowTintAmt),hT=tintOffset(a.highlightTintHue,a.highlightTintAmt),splitOn=a.shadowTintAmt>0||a.highlightTintAmt>0;
+  // Filmic S-curve: punchy mids, soft roll-off at both ends (instead of linear clipping)
+  const ck=a.contrast>=0?a.contrast/100*1.3:a.contrast/100*.55, cOn=a.contrast!==0;
+  const bl=a.blacks/100, crush=bl<0?-bl*.14:0, lift=bl>0?bl*.12:0;
+  const satM=1+a.saturation/100, vib=a.vibrance/100*.9, satOn=a.saturation!==0||a.vibrance!==0;
+  const bh=a.hsl.map(b=>b.hue),bs=a.hsl.map(b=>b.sat),bl2=a.hsl.map(b=>b.lum),hslOn=a.hsl.some(b=>b.hue||b.sat||b.lum);
+  const sT=tintOffset(a.shadowTintHue,a.shadowTintAmt),mT=tintOffset(a.midTintHue,a.midTintAmt,.2),hT=tintOffset(a.highlightTintHue,a.highlightTintAmt);
+  const splitOn=a.shadowTintAmt>0||a.highlightTintAmt>0||a.midTintAmt>0;
   const fade=a.fade/100,fM=1-fade*.22,fA=fade*.10,vig=a.vignette/100,leak=a.lightLeak/100;
-  const gAmt=a.grain/100*.16, gPx=Math.max(1,Math.min(w,h)/900*(.6+a.grainSize/40));
   const tmp=[0,0,0];
+  const curve=v=>{const x=v-.5; return ck>0 ? .5+x*(1+ck)/(1+ck*Math.min(1,Math.abs(2*x))*.85) : .5+x*(1+ck);};
   for(let y=0;y<h;y++){
-    const ny=(y+.5)/h-.5, ly=(y+.5)/h, gy=Math.floor(y/gPx);
+    const ny=(y+.5)/h-.5, ly=(y+.5)/h;
     for(let x=0;x<w;x++){
       const i=(y*w+x)*4;
       let r=d[i]/255*rM,g=d[i+1]/255*gM,b=d[i+2]/255*bM;
-      if(shOn){let l=.2126*r+.7152*g+.0722*b;l=l<0?0:l>1?1:l;const inv=1-l,dd=sh*.35*inv*inv*inv+hi*.35*l*l*l;r+=dd;g+=dd;b+=dd;}
-      if(cOn){r=(r-.5)*cM+.5;g=(g-.5)*cM+.5;b=(b-.5)*cM+.5;}
+      if(shOn){let l=.2126*r+.7152*g+.0722*b;l=l<0?0:l>1?1:l;const inv=1-l,dd=sh*.38*inv*inv*inv+hi*.38*l*l*l;r+=dd;g+=dd;b+=dd;}
+      if(cOn){r=curve(r);g=curve(g);b=curve(b);}
+      if(crush){r=(r-crush)/(1-crush);g=(g-crush)/(1-crush);b=(b-crush)/(1-crush);if(r<0)r=0;if(g<0)g=0;if(b<0)b=0;}
+      if(lift){r=r*(1-lift)+lift;g=g*(1-lift)+lift;b=b*(1-lift)+lift;}
       if(satOn){const l=.2126*r+.7152*g+.0722*b,mx=Math.max(r,g,b),mn=Math.min(r,g,b);let s=mx-mn;s=s<0?0:s>1?1:s;
         const f=Math.max(0,satM*(1+vib*(1-s)));r=l+(r-l)*f;g=l+(g-l)*f;b=l+(b-l)*f;}
       if(hslOn){const cr=Math.min(1,Math.max(0,r)),cg=Math.min(1,Math.max(0,g)),cb=Math.min(1,Math.max(0,b));
         const mx=Math.max(cr,cg,cb),mn=Math.min(cr,cg,cb),dd=mx-mn;
         if(dd>1e-4){let hue=mx===cr?60*(((cg-cb)/dd)%6):mx===cg?60*((cb-cr)/dd+2):60*((cr-cg)/dd+4);if(hue<0)hue+=360;
           const s=dd/mx;let dh=0,ds=0,dl=0;
-          for(let k=0;k<6;k++){let dist=Math.abs(hue-CENTERS[k]);if(dist>180)dist=360-dist;const wg=1-dist/SPANS[k];if(wg>0){dh+=wg*bh[k];ds+=wg*bs[k];dl+=wg*bl[k];}}
+          for(let k=0;k<6;k++){let dist=Math.abs(hue-CENTERS[k]);if(dist>180)dist=360-dist;const wg=1-dist/SPANS[k];if(wg>0){dh+=wg*bh[k];ds+=wg*bs[k];dl+=wg*bl2[k];}}
           if(dh||ds||dl){let nh=(hue+dh*.3)%360;if(nh<0)nh+=360;const ns=Math.min(1,Math.max(0,s*(1+ds/100)));hsvToRgb(nh,ns,mx*(1+dl/100*.35*s),tmp);r=tmp[0];g=tmp[1];b=tmp[2];}}}
-      if(splitOn){let l=.2126*r+.7152*g+.0722*b;l=l<0?0:l>1?1:l;const ws=(1-l)*(1-l),wh=l*l;r+=sT[0]*ws+hT[0]*wh;g+=sT[1]*ws+hT[1]*wh;b+=sT[2]*ws+hT[2]*wh;}
+      if(splitOn){let l=.2126*r+.7152*g+.0722*b;l=l<0?0:l>1?1:l;
+        // skin protection: warm, moderately saturated pixels (r>g>b) keep ~55% less grading
+        const sk=(r>g&&g>b&&l>.12)?Math.min(1,(r-b)*2.6)*Math.min(1,(g-b)/(r-b+1e-4)*1.6)*.55:0,k=1-sk;
+        const ws=(1-l)*(1-l)*1.15*k,wh=l*l*k,wm=4*l*(1-l)*k;
+        r+=sT[0]*ws+mT[0]*wm+hT[0]*wh;g+=sT[1]*ws+mT[1]*wm+hT[1]*wh;b+=sT[2]*ws+mT[2]*wm+hT[2]*wh;}
       if(a.mono){const l=.2126*r+.7152*g+.0722*b;r=g=b=l;}
       if(fade>0){r=r*fM+fA;g=g*fM+fA;b=b*fM+fA;}
-      if(vig>0){const nx=(x+.5)/w-.5,dd=Math.sqrt(nx*nx+ny*ny)*1.4142,m=1-vig*.7*smooth(.45,1.05,dd);r*=m;g*=m;b*=m;}
+      if(vig>0){const nx=(x+.5)/w-.5,dd=Math.sqrt(nx*nx+ny*ny)*1.4142,m=1-vig*.75*smooth(.4,1.05,dd);r*=m;g*=m;b*=m;}
       if(leak>0){const dx=1-(x+.5)/w,dist=Math.sqrt(dx*dx+ly*ly);let lt=Math.max(0,1-dist/.9);lt=lt*lt*leak;
         r=1-(1-Math.min(1,Math.max(0,r)))*(1-lt);g=1-(1-Math.min(1,Math.max(0,g)))*(1-lt*.55);b=1-(1-Math.min(1,Math.max(0,b)))*(1-lt*.2);}
-      if(gAmt>0){const n=hash(Math.floor(x/gPx),gy);let l=.2126*r+.7152*g+.0722*b;l=l<0?0:l>1?1:l;const dd=n*gAmt*(1-Math.abs(l-.5)*1.2);r+=dd;g+=dd;b+=dd;}
-      d[i]=r*255+.5;d[i+1]=g*255+.5;d[i+2]=b*255+.5; // Uint8ClampedArray clamps & rounds
+      d[i]=r*255+.5;d[i+1]=g*255+.5;d[i+2]=b*255+.5;
     }
   }
 }
+// Halation (film's red glow around bright light) and bloom (soft white glow)
+function applyGlow(d,w,h,a){
+  const hal=a.halation/100,blo=a.bloom/100; if(hal<=0&&blo<=0) return;
+  const f=4,sw=Math.max(2,Math.ceil(w/f)),sh=Math.max(2,Math.ceil(h/f)),m=new Float32Array(sw*sh);
+  for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){const i=(Math.min(h-1,y*f)*w+Math.min(w-1,x*f))*4;
+    const l=(.2126*d[i]+.7152*d[i+1]+.0722*d[i+2])/255;const v=Math.max(0,(l-.6)/.4);m[y*sw+x]=v*v;}
+  const g=boxBlur(m,sw,sh,1,Math.max(1,Math.round(Math.min(sw,sh)*.035)),3);
+  const kr=hal*1.1+blo*.7,kg=hal*.28+blo*.62,kb=hal*.12+blo*.5;
+  for(let y=0;y<h;y++){const fy=Math.min(sh-1.001,y/f),y0=fy|0,ty=fy-y0;
+    for(let x=0;x<w;x++){const fx=Math.min(sw-1.001,x/f),x0=fx|0,tx=fx-x0,o=y0*sw+x0;
+      const v=(g[o]*(1-tx)+g[o+1]*tx)*(1-ty)+(g[o+sw]*(1-tx)+g[o+sw+1]*tx)*ty; if(v<.002) continue;
+      const i=(y*w+x)*4;
+      d[i]=255-(255-d[i])*(1-Math.min(1,v*kr)); d[i+1]=255-(255-d[i+1])*(1-Math.min(1,v*kg)); d[i+2]=255-(255-d[i+2])*(1-Math.min(1,v*kb));}}
+}
+function applyGrain(d,w,h,a){
+  const amt=a.grain/100*.16; if(amt<=0) return;
+  const px=Math.max(1,Math.min(w,h)/900*(.6+a.grainSize/40));
+  for(let y=0;y<h;y++){const gy=Math.floor(y/px);for(let x=0;x<w;x++){const i=(y*w+x)*4;
+    const l=(.2126*d[i]+.7152*d[i+1]+.0722*d[i+2])/255,n=hash(Math.floor(x/px),gy)*amt*(1-Math.abs(l-.5)*1.2)*255;
+    d[i]+=n;d[i+1]+=n;d[i+2]+=n;}}
+}
+function applyGrade(d,w,h,a){ applyAdjust(d,w,h,a); applyGlow(d,w,h,a); applyGrain(d,w,h,a); }
 
 // ======================================================================
 // Blur + AI skin retouch (web: skin-tone mask instead of face contours)
@@ -362,25 +432,51 @@ function compose(src,p,maxLong,watermark){
   }
   if(f==="Film"){c.fillStyle="#2c2a26";const hw=u*.035,hh=ins[1]*.32;for(let x=u*.03;x<ow-hw;x+=hw*2){c.fillRect(x,ins[1]*.12,hw,hh);c.fillRect(x,oh-ins[3]*.12-hh,hw,hh);}
     c.fillStyle="#d89a36";c.font=`${ins[1]*.28}px "IBM Plex Mono", monospace`;c.textAlign="left";c.fillText("MOODCAM 400",u*.05,ins[1]*.86);c.textAlign="right";c.fillText("▸ 12A",ow-u*.05,oh-ins[3]*.32);}
-  if(p.caption.trim()){
+  // Cinema letterbox: black bars down to 2.39:1 inside the photo area
+  let lb=0;
+  if(p.letterbox&&iw/ih<2.39){lb=(ih-iw/2.39)/2;c.fillStyle="#000";c.fillRect(ix,iy,iw,lb);c.fillRect(ix,iy+ih-lb,iw,lb);}
+  if(p.caption.trim()&&p.subtitle){
+    // movie-subtitle style: sans, outlined, sits in the lower bar when letterboxed
+    const fs=Math.max(12,u*(lb?.045:.05)); c.font=`600 ${fs}px "IBM Plex Sans Thai", sans-serif`; c.textAlign="center";
+    const y=lb?iy+ih-lb/2+fs*.35:iy+ih-u*.08; c.lineJoin="round"; c.lineWidth=fs*.18; c.strokeStyle="rgba(0,0,0,.85)";
+    c.strokeText(p.caption,ow/2,y); c.fillStyle="#fff3a8"; c.fillText(p.caption,ow/2,y);
+  } else if(p.caption.trim()){
     c.textAlign="center";
     if(f==="Polaroid"){c.fillStyle="#2a2622";c.font=`italic ${u*.055}px "Cormorant Garamond", serif`;c.fillText(p.caption,ow/2,iy+ih+ins[3]*.55);}
     else{c.fillStyle="#fff";c.shadowColor="rgba(0,0,0,.6)";c.shadowBlur=u*.015;c.font=`${u*.05}px "Cormorant Garamond", serif`;c.fillText(p.caption,ow/2,iy+ih-u*.07);c.shadowBlur=0;}
   }
+  if(p.date){ // film-camera date imprint
+    const dt=new Date(),txt=`'${String(dt.getFullYear()).slice(2)} ${String(dt.getMonth()+1).padStart(2," ")} ${String(dt.getDate()).padStart(2,"0")}`;
+    const fs=u*.042; c.font=`500 ${fs}px "IBM Plex Mono", monospace`; c.textAlign="right";
+    c.shadowColor="rgba(255,120,40,.9)"; c.shadowBlur=fs*.45; c.fillStyle="#ff9a3c";
+    c.fillText(txt,ix+iw-u*.04,iy+ih-lb-u*.04-(p.music?u*.2:0)); c.shadowBlur=0;
+  }
+  if(p.music){ // "Now playing" card
+    const cw=Math.min(iw*.86,u*.9),chh=u*.15,cx=ix+(iw-cw)/2,cy=iy+ih-lb-chh-u*.04,r=chh*.22;
+    c.fillStyle="rgba(12,12,12,.55)"; c.beginPath(); c.moveTo(cx+r,cy); c.arcTo(cx+cw,cy,cx+cw,cy+chh,r); c.arcTo(cx+cw,cy+chh,cx,cy+chh,r); c.arcTo(cx,cy+chh,cx,cy,r); c.arcTo(cx,cy,cx+cw,cy,r); c.fill();
+    const pad=chh*.18,art=chh-pad*2; const gr=c.createLinearGradient(cx+pad,cy+pad,cx+pad+art,cy+pad+art); gr.addColorStop(0,"#d89a36"); gr.addColorStop(1,"#7a3b5c");
+    c.fillStyle=gr; c.fillRect(cx+pad,cy+pad,art,art); c.fillStyle="rgba(255,255,255,.9)"; c.font=`${art*.5}px sans-serif`; c.textAlign="center"; c.fillText("♪",cx+pad+art/2,cy+pad+art*.68);
+    const tx=cx+pad*2+art; c.textAlign="left"; c.fillStyle="#fff"; c.font=`600 ${chh*.22}px "IBM Plex Sans Thai", sans-serif`;
+    c.fillText(p.song||"Untitled",tx,cy+chh*.36,cw-art-pad*4); c.fillStyle="rgba(255,255,255,.7)"; c.font=`${chh*.17}px "IBM Plex Sans Thai", sans-serif`;
+    c.fillText(p.artist||"MoodCam",tx,cy+chh*.58,cw-art-pad*4);
+    const bw=cw-art-pad*4,by=cy+chh*.76; c.fillStyle="rgba(255,255,255,.25)"; c.fillRect(tx,by,bw,chh*.035); c.fillStyle="#fff"; c.fillRect(tx,by,bw*.38,chh*.035);
+    c.beginPath(); c.arc(tx+bw*.38,by+chh*.0175,chh*.05,0,7); c.fill();
+  }
   if(watermark){c.textAlign="left";c.font=`600 ${u*.024}px "IBM Plex Sans Thai", sans-serif`;c.fillStyle="rgba(216,154,54,.92)";
     c.shadowColor="rgba(0,0,0,.5)";c.shadowBlur=u*.008;const wm=watermark.split("").join(String.fromCharCode(8202));
-    c.fillText(wm,ix+u*.03,f==="Polaroid"?iy+ih+ins[3]*.85:iy+ih-u*.03);c.shadowBlur=0;}
+    c.fillText(wm,ix+u*.03,f==="Polaroid"?iy+ih+ins[3]*.85:iy+u*.05+(lb||0));c.shadowBlur=0;}
   return out;
 }
 
 // ======================================================================
 // State, history, rendering
 // ======================================================================
-const S={lookId:"original",lookName:"Original",adj:defAdj(),ai:{smooth:0,tone:0,brighten:0,details:0},
-  social:{aspect:null,cx:.5,cy:.5,frame:0,bg:0,caption:""},watermark:true,quality:.92};
-let full=null,prev=null,sourceName="SAMPLE",tab="looks",adjTab="color",band=0,aiTool="auto",lookCat="film",lastOut=null;
+const S={lookId:"original",lookName:"Original",adj:defAdj(),strength:100,ai:{smooth:0,tone:0,brighten:0,details:0},
+  social:{aspect:null,cx:.5,cy:.5,frame:0,bg:0,caption:"",letterbox:false,subtitle:false,date:false,music:false,song:"",artist:""},watermark:true,quality:.92};
+const grade=()=>effective(S.adj,S.strength/100);
+let full=null,prev=null,sourceName="SAMPLE",tab="looks",adjTab="color",band=0,aiTool="auto",lookCat="movie",lastOut=null;
 const hist={undo:[],redo:[],last:null};
-const snap=()=>JSON.stringify({lookId:S.lookId,lookName:S.lookName,adj:S.adj,ai:S.ai,social:S.social});
+const snap=()=>JSON.stringify({lookId:S.lookId,lookName:S.lookName,adj:S.adj,strength:S.strength,ai:S.ai,social:S.social});
 function commit(){const s=snap();if(s===hist.last)return;if(hist.last)hist.undo.push(hist.last);if(hist.undo.length>60)hist.undo.shift();hist.redo=[];hist.last=s;syncHist();}
 function restore(s){Object.assign(S,JSON.parse(s));hist.last=s;syncHist();renderPanel();requestRender();}
 function syncHist(){$("#undo").disabled=!hist.undo.length;$("#redo").disabled=!hist.redo.length;}
@@ -390,7 +486,7 @@ function scaled(img,maxSide){const s=Math.min(1,maxSide/Math.max(img.width,img.h
   c.width=Math.max(1,Math.round(img.width*s));c.height=Math.max(1,Math.round(img.height*s));const x=c.getContext("2d");x.imageSmoothingQuality="high";x.drawImage(img,0,0,c.width,c.height);return c;}
 function renderEdit(base){
   const w=base.width,h=base.height,ctx=base.getContext("2d",{willReadFrequently:true}),id=ctx.getImageData(0,0,w,h);
-  applyAI(base,id.data,w,h,S.ai); applyAdjust(id.data,w,h,S.adj);
+  applyAI(base,id.data,w,h,S.ai); applyGrade(id.data,w,h,grade());
   const out=document.createElement("canvas");out.width=w;out.height=h;out.getContext("2d").putImageData(id,0,0);return out;
 }
 const wmText=()=>S.watermark?"MOODCAM · "+S.lookName.toUpperCase():null;
@@ -412,7 +508,7 @@ let thumbSrc=null;const thumbCache=new Map();
 function thumbFor(look){
   const key=look.id+JSON.stringify(look.adj);if(thumbCache.has(key))return thumbCache.get(key);
   const c=document.createElement("canvas");c.width=thumbSrc.width;c.height=thumbSrc.height;const x=c.getContext("2d");x.drawImage(thumbSrc,0,0);
-  const id=x.getImageData(0,0,c.width,c.height);applyAdjust(id.data,c.width,c.height,look.adj);x.putImageData(id,0,0);thumbCache.set(key,c);return c;
+  const id=x.getImageData(0,0,c.width,c.height);applyGrade(id.data,c.width,c.height,look.adj);x.putImageData(id,0,0);thumbCache.set(key,c);return c;
 }
 
 // ---------- load images
@@ -481,25 +577,34 @@ function toggleRow(text,on,onChange){const d=document.createElement("div");d.cla
   d.querySelector("button").onclick=e=>{const v=e.currentTarget.getAttribute("aria-checked")!=="true";e.currentTarget.setAttribute("aria-checked",v);onChange(v);};return d;}
 
 function applyLook(l){S.lookId=l.id;S.lookName=l.name;S.adj=clone(l.adj);commit();renderPanel();requestRender();}
-
+function surprise(){
+  const pool=PRESETS.filter(l=>l.id!=="original"&&l.id!==S.lookId); const l=pool[Math.floor(Math.random()*pool.length)];
+  S.strength=Math.round(90+Math.random()*40); lookCat=l.cat; applyLook(l); toast(`🎲 ${l.name} · ${S.strength}%`);
+}
+const CATS=[["movie","🎬 Movie Mood"],["music","🎧 Music Mood"],["cine","Cinematic"],["film","Film"],["mine","My Looks"]];
 function panelLooks(p){
-  p.appendChild(chips([["mine","My Looks"],["film","Film Presets"],["cine","Cinematic"]],lookCat,k=>{lookCat=k;renderPanel();}));
+  const top=document.createElement("div");top.className="footer";top.style.paddingTop="0";top.style.marginBottom="8px";
+  top.innerHTML=`<button class="chip on" id="surprise">🎲 สุ่ม Look</button><span class="sp"></span><span class="note" style="margin:0">${S.lookName}</span>`;
+  p.appendChild(top); top.querySelector("#surprise").onclick=surprise;
+  p.appendChild(slider("ความแรง","strength",S.strength,0,150,v=>{S.strength=v;},{disp:v=>Math.round(v)+"%"}));
+  const cur=allLooks().find(l=>l.id===S.lookId);
+  if(cur&&cur.desc){const dsc=document.createElement("p");dsc.className="note";dsc.style.margin="2px 0 10px";dsc.textContent=cur.desc;p.appendChild(dsc);}
+  p.appendChild(chips(CATS,lookCat,k=>{lookCat=k;renderPanel();}));
   const list=lookCat==="mine"?mine:PRESETS.filter(l=>l.cat===lookCat);
   if(!list.length){const n=document.createElement("p");n.className="note";n.textContent="ยังไม่มี Look ของคุณ — ไปที่ ADJUST ปรับสีตามใจ แล้วกด Save Look";p.appendChild(n);return;}
   const g=document.createElement("div");g.className="looks";
-  list.forEach(l=>{const b=document.createElement("button");b.className="look"+(l.id===S.lookId?" on":"");b.setAttribute("aria-label",l.name);
+  list.forEach(l=>{const b=document.createElement("button");b.className="look"+(l.id===S.lookId?" on":"");b.setAttribute("aria-label",l.name);b.title=l.desc||l.name;
     b.appendChild(thumbFor(l));const s=document.createElement("span");s.textContent=l.name;b.appendChild(s);b.onclick=()=>applyLook(l);
     if(lookCat==="mine"){const x=document.createElement("span");x.className="del";x.textContent="×";x.title="ลบ";x.style.padding="0";x.style.background="rgba(0,0,0,.6)";x.style.inset="4px 4px auto auto";x.style.width="20px";x.style.textAlign="center";
       x.onclick=e=>{e.stopPropagation();mine=mine.filter(m=>m.id!==l.id);saveMine();renderPanel();toast(`ลบ "${l.name}" แล้ว`);};b.appendChild(x);}
     g.appendChild(b);});
   p.appendChild(g);
-  const n=document.createElement("p");n.className="note";n.textContent="กด Look เพื่อใช้ แล้วไปที่ ADJUST เพื่อปรับละเอียด";p.appendChild(n);
 }
 
 function panelAdjust(p){
   p.appendChild(chips([["light","Light"],["color","Color"],["hsl","HSL"],["grain","Grain"],["effects","Effects"]],adjTab,k=>{adjTab=k;renderPanel();}));
   const a=S.adj,set=k=>v=>{a[k]=v;};
-  if(adjTab==="light"){[["Exposure","exposure"],["Contrast","contrast"],["Highlights","highlights"],["Shadows","shadows"]].forEach(([l,k])=>p.appendChild(slider(l,k,a[k],-100,100,set(k))));}
+  if(adjTab==="light"){[["Exposure","exposure"],["Contrast","contrast"],["Highlights","highlights"],["Shadows","shadows"],["Blacks","blacks"]].forEach(([l,k])=>p.appendChild(slider(l,k,a[k],-100,100,set(k))));}
   if(adjTab==="color"){[["Temp","temp"],["Tint","tint"],["Vibrance","vibrance"],["Saturation","saturation"]].forEach(([l,k])=>p.appendChild(slider(l,k,a[k],-100,100,set(k),{grad:GRAD[k]})));}
   if(adjTab==="hsl"){
     const names=["Red","Orange","Yellow","Green","Blue","Purple"],cols=["#e5484d","#f08a3a","#f2d046","#4caf6a","#3d7fe0","#9b59d0"];
@@ -513,10 +618,12 @@ function panelAdjust(p){
   }
   if(adjTab==="grain"){p.appendChild(slider("Amount","grain",a.grain,0,100,set("grain")));p.appendChild(slider("Size","grainSize",a.grainSize,0,100,set("grainSize")));}
   if(adjTab==="effects"){
-    [["Vignette","vignette"],["Fade","fade"],["Light Leak","lightLeak"]].forEach(([l,k])=>p.appendChild(slider(l,k,a[k],0,100,set(k))));
+    [["Halation","halation"],["Bloom","bloom"],["Vignette","vignette"],["Fade","fade"],["Light Leak","lightLeak"]].forEach(([l,k])=>p.appendChild(slider(l,k,a[k],0,100,set(k))));
     p.appendChild(label("SPLIT TONE"));
     p.appendChild(slider("Shadow hue","shadowTintHue",a.shadowTintHue,0,360,set("shadowTintHue"),{grad:GRAD.hue,disp:v=>Math.round(v)+"°"}));
     p.appendChild(slider("Shadow amt","shadowTintAmt",a.shadowTintAmt,0,100,set("shadowTintAmt")));
+    p.appendChild(slider("Midtone hue","midTintHue",a.midTintHue,0,360,set("midTintHue"),{grad:GRAD.hue,disp:v=>Math.round(v)+"°"}));
+    p.appendChild(slider("Midtone amt","midTintAmt",a.midTintAmt,0,100,set("midTintAmt")));
     p.appendChild(slider("Highlight hue","highlightTintHue",a.highlightTintHue,0,360,set("highlightTintHue"),{grad:GRAD.hue,disp:v=>Math.round(v)+"°"}));
     p.appendChild(slider("Highlight amt","highlightTintAmt",a.highlightTintAmt,0,100,set("highlightTintAmt")));
     p.appendChild(toggleRow("Black & White",a.mono,v=>{a.mono=v;commit();requestRender();}));
@@ -567,6 +674,18 @@ function panelSocial(p){
   p.appendChild(label("CAPTION"));
   const t=document.createElement("input");t.className="text";t.id="caption";t.maxLength=60;t.placeholder="พิมพ์แคปชันบนรูป…";t.value=s.caption;
   t.oninput=()=>{s.caption=t.value;requestRender();};t.onchange=commit;p.appendChild(t);
+  p.appendChild(label("CINEMA"));
+  p.appendChild(toggleRow("แถบดำโรงหนัง 2.39:1",s.letterbox,v=>{s.letterbox=v;commit();requestRender();}));
+  p.appendChild(toggleRow("แคปชันแบบซับหนัง",s.subtitle,v=>{s.subtitle=v;if(v&&!s.caption){s.caption="บางความรู้สึก… ก็สวยเกินกว่าจะพูดออกมา";renderPanel();}commit();requestRender();}));
+  p.appendChild(toggleRow("วันที่แบบกล้องฟิล์ม",s.date,v=>{s.date=v;commit();requestRender();}));
+  p.appendChild(label("MUSIC CARD"));
+  p.appendChild(toggleRow("การ์ด Now Playing",s.music,v=>{s.music=v;commit();renderPanel();requestRender();}));
+  if(s.music){
+    const mk=(id,ph,key)=>{const t=document.createElement("input");t.className="text";t.id=id;t.maxLength=40;t.placeholder=ph;t.value=s[key];t.style.marginTop="6px";
+      t.oninput=()=>{s[key]=t.value;requestRender();};t.onchange=commit;return t;};
+    p.appendChild(mk("song","ชื่อเพลง","song")); p.appendChild(mk("artist","ศิลปิน","artist"));
+  }
+  p.appendChild(label("WATERMARK"));
   p.appendChild(toggleRow("Watermark MOODCAM",S.watermark,v=>{S.watermark=v;requestRender();}));
 }
 
@@ -631,14 +750,14 @@ let toastT;function toast(m){let t=$(".toast");if(!t){t=document.createElement("
 // ======================================================================
 const CAM={stream:null,facing:"environment",timer:0,grid:true,torch:false,track:null,zoomCaps:null};
 function liveFilter(a){ // CSS approximation of the look for the viewfinder; the captured photo gets the full kernel
-  const b=Math.pow(2,a.exposure/100*1.5)*(1+a.fade/100*.06), c=(a.contrast>=0?1+a.contrast/100*.7:1+a.contrast/100*.5)*(1-a.fade/100*.2);
+  const b=Math.pow(2,a.exposure/100*1.5)*(1+a.fade/100*.06), c=(a.contrast>=0?1+a.contrast/100*.9:1+a.contrast/100*.5)*(1-a.fade/100*.2)*(1-a.blacks/100*.25);
   const s=a.mono?0:Math.max(0,(1+a.saturation/100)*(1+a.vibrance/100*.3));
   const warm=Math.max(0,a.temp)/100*.45+a.highlightTintAmt/100*.12, hue=-a.tint/100*12+(a.temp<0?a.temp/100*25:0);
   return `brightness(${b.toFixed(3)}) contrast(${c.toFixed(3)}) saturate(${s.toFixed(3)}) sepia(${warm.toFixed(3)}) hue-rotate(${hue.toFixed(1)}deg)`+(a.mono?" grayscale(1)":"");
 }
 function camApplyLook(){
-  $("#video").style.filter=liveFilter(S.adj);
-  const v=S.adj.vignette/100;$("#vfvig").style.background=v>0?`radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,${(v*.65).toFixed(2)}) 100%)`:"none";
+  $("#video").style.filter=liveFilter(grade());
+  const v=grade().vignette/100;$("#vfvig").style.background=v>0?`radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,${(v*.65).toFixed(2)}) 100%)`:"none";
   $("#camtag").textContent="LIVE · "+S.lookName.toUpperCase();
   const box=$("#camlooks");box.textContent="";
   allLooks().forEach(l=>{const b=document.createElement("button");b.className="chip"+(l.id===S.lookId?" on":"");b.textContent=l.name;
@@ -707,7 +826,7 @@ window.addEventListener("appinstalled",()=>{$("#install").hidden=true;});
 
 // ---------- boot: open with the sample scene and a look applied so the editor is live
 setSource(sampleScene(),"SAMPLE");
-applyLook(PRESETS[1]);
+applyLook(PRESETS.find(l=>l.id==="neon_2049"));
 hist.undo=[];hist.last=snap();syncHist();
 if(window.claude&&window.claude.use){window.claude.use("downloads").then(d=>{downloads=d;}).catch(()=>{});}
 </script>
