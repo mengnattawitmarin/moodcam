@@ -173,6 +173,17 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    public boolean dispatchKeyEvent(android.view.KeyEvent e) {
+        int k = e.getKeyCode();
+        if (k == android.view.KeyEvent.KEYCODE_VOLUME_UP || k == android.view.KeyEvent.KEYCODE_VOLUME_DOWN || k == android.view.KeyEvent.KEYCODE_CAMERA) {
+            if (e.getAction() == android.view.KeyEvent.ACTION_UP && web != null)
+                web.evaluateJavascript("window.__mcShutter&&window.__mcShutter()", null);
+            return true;
+        }
+        return super.dispatchKeyEvent(e);
+    }
+
+    @Override
     public void onBackPressed() {
         if (web.canGoBack()) web.goBack();
         else super.onBackPressed();

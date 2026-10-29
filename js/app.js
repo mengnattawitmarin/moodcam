@@ -9,7 +9,7 @@ import * as CAM from "./camera.js";
 import {detectDevice} from "./device.js";
 import * as DB from "./store.js";
 
-const VERSION = "v4";
+const VERSION = "v5";
 const APP_URL = "https://mengnattawitmarin.github.io/moodcam/";
 const $ = q => document.querySelector(q);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
@@ -23,14 +23,14 @@ const haptic = (ms = 8) => { try { navigator.vibrate && navigator.vibrate(ms); }
 let toastT; function toast(m, ms = 2600) { let t = $(".toast"); if (!t) { t = el("div", "toast"); t.setAttribute("role", "status"); document.body.appendChild(t); } t.textContent = m; t.hidden = false; t.style.animation = "none"; void t.offsetWidth; t.style.animation = ""; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, ms); }
 
 // ------------------------------------------------------------------ preferences & state
-const prefs = Object.assign({grid: true, center: false, gps: false, stripGpsOnShare: false, keepExif: true, quality: .95, deviceProfile: true, rollSize: 24, ratio: "3:4", timer: 0, flash: "off", lastLook: "teal_orange", strength: 100}, LS.get("prefs", {}));
+const prefs = Object.assign({grid: true, center: false, gps: false, stripGpsOnShare: false, keepExif: true, quality: .95, deviceProfile: true, rollSize: 24, ratio: "3:4", timer: 0, flash: "off", lastLook: "teal_orange", strength: 100, level: false, histo: false, sound: true, mirror: true, tapShoot: false, tray: "looks"}, LS.get("prefs", {}));
 const savePrefs = () => LS.set("prefs", prefs);
 let mine = LS.get("looks", []).map(l => Object.assign(l, {adj: E.A(l.adj)}));
 const saveMine = () => LS.set("looks", mine);
 const allLooks = () => mine.concat(PRESETS);
 let device = {preview: 1400, exportMax: 4000, profile: {adj: {}, note: ""}, brandName: "", model: ""};
 
-const S = {lookId: "original", lookName: "Original", adj: E.defAdj(), ref: null, strength: prefs.strength, beauty: {}, weather: {mode: "none", amt: 80}, lens: "natural", body: "none", social: SO.defaultSocial()};
+const S = {lookId: "original", lookName: "Original", adj: E.defAdj(), ref: null, strength: prefs.strength, beauty: {}, weather: {mode: "none", amt: 80}, lens: "natural", body: "none", social: SO.defaultSocial(), cam: {exposure: 0, temp: 0}};
 const lookOf = () => allLooks().find(l => l.id === S.lookId);
 const lensOf = () => LENSES.find(l => l.id === S.lens) || LENSES[0];
 const bodyOf = () => BODIES.find(b => b.id === S.body) || BODIES[0];
@@ -51,8 +51,9 @@ function mergeAdj(a, b) {
   }
   return o;
 }
-function gradeAdj() {
+function gradeAdj(soft = S.cam) {
   let a = E.effective(S.adj, S.strength / 100);
+  if (soft && (soft.exposure || soft.temp)) a = mergeAdj(a, soft);
   a = mergeAdj(a, FX.bodyAdj(bodyOf()));
   if (prefs.deviceProfile && device.profile && session.fromCamera) a = mergeAdj(a, device.profile.adj);
   return a;
@@ -60,7 +61,7 @@ function gradeAdj() {
 
 // ------------------------------------------------------------------ undo / redo
 const hist = {u: [], r: [], last: null};
-const snap = () => JSON.stringify({lookId: S.lookId, lookName: S.lookName, adj: S.adj, ref: S.ref, strength: S.strength, beauty: S.beauty, weather: S.weather, lens: S.lens, body: S.body, social: S.social});
+const snap = () => JSON.stringify({lookId: S.lookId, lookName: S.lookName, adj: S.adj, ref: S.ref, strength: S.strength, beauty: S.beauty, weather: S.weather, lens: S.lens, body: S.body, social: S.social, cam: S.cam});
 function commit() { const s = snap(); if (s === hist.last) return; if (hist.last) hist.u.push(hist.last); if (hist.u.length > 60) hist.u.shift(); hist.r = []; hist.last = s; syncHist(); }
 function restore(s) { Object.assign(S, JSON.parse(s)); hist.last = s; syncHist(); renderPanel(); requestRender(); }
 function syncHist() { $("#e-undo").disabled = !hist.u.length; $("#e-redo").disabled = !hist.r.length; }
@@ -107,11 +108,22 @@ const finalCompose = (img, maxLong) => SO.compose(img, S.social, maxLong, bodyOf
 
 // ------------------------------------------------------------------ views
 const views = ["#v-cam", "#v-edit", "#v-dump", "#v-roll"];
-function show(v) { views.forEach(q => $(q).hidden = q !== v); if (v === "#v-cam") startCamera(); else CAM.stop(); }
+function show(v) { views.forEach(q => $(q).hidden = q !== v); if (v === "#v-cam") { startCamera(); if (prefs.level) level(true); } else { CAM.stop(); histo(false); level(false); toggleQS(false); } }
 
 // ================================================================== CAMERA
-const RATIOS = {"3:4": 3 / 4, "4:5": 4 / 5, "1:1": 1, "9:16": 9 / 16};
-const camState = {mode: "photo", prevBody: null, prevLook: null, lastPos: null, watch: null, starting: false, thumbSrc: null};
+const RATIOS = {"3:4": 3 / 4, "9:16": 9 / 16, "1:1": 1, "4:5": 4 / 5, "full": 0};
+const camState = {mode: "photo", prevBody: null, prevLook: null, lastPos: null, watch: null, starting: false, thumbSrc: null,
+  ev: 0, wb: 0, zoom: 1, digital: 1, ultra: false, focusAt: {x: .5, y: .5}, tray: prefs.tray || "looks"};
+const ratioVal = () => prefs.ratio === "full" ? ($("#v-cam").clientWidth || innerWidth) / ($("#v-cam").clientHeight || innerHeight) : RATIOS[prefs.ratio] || 3 / 4;
+// camera-only software corrections (used when the phone does not expose real EV / white balance)
+function camSoft() {
+  const mc = CAM.manualCaps(), o = {exposure: 0, temp: 0};
+  if (!mc.ev && camState.ev) o.exposure = camState.ev / 1.5 * 100;
+  if (!(mc.wb && mc.wbManual) && camState.wb) o.temp = Math.max(-100, Math.min(100, (camState.wb - 5500) / 35));
+  return o;
+}
+const coalesce = fn => { let busy = false, next; return v => { next = v; if (busy) return; const run = async () => { busy = true; const x = next; next = undefined; try { await fn(x); } catch (e) {} busy = false; if (next !== undefined) run(); }; run(); }; };
+const hwZoom = coalesce(v => CAM.setZoom(v)), hwEV = coalesce(v => CAM.setEV(v)), hwWB = coalesce(v => CAM.setWB(v)), hwISO = coalesce(v => CAM.setISO(v)), hwSh = coalesce(v => CAM.setShutter(v)), hwFocus = coalesce(v => CAM.setFocus(v));
 
 async function startCamera(opts = {}) {
   if (!LS.get("consent", null) || camState.starting) return;
@@ -121,9 +133,13 @@ async function startCamera(opts = {}) {
     await CAM.start($("#video"), Object.assign({facing: CAM.cam.facing}, opts));
     $("#vf-nocam").hidden = true;
     $("#vf").classList.toggle("front", CAM.cam.facing === "user" && !opts.deviceId);
-    renderLensRow(); applyLivePreview(); renderCamLooks(); updateHud();
+    camState.ultra = !!(opts.deviceId && CAM.cam.lenses.find(l => l.id === opts.deviceId && l.tag.startsWith("0.5")));
+    if (!opts.keepZoom) { camState.zoom = camState.ultra ? .5 : 1; camState.digital = 1; }
+    if (CAM.manualCaps().ev && camState.ev) CAM.setEV(camState.ev);
+    renderZoom(); applyLivePreview(); renderCamLooks(); renderQbar(); updateHud();
     setTimeout(snapshotThumbs, 600);
     if (prefs.gps) watchGps(true);
+    histo(prefs.histo);
   } catch (e) {
     const msg = e && e.name === "NotAllowedError" ? "ยังไม่ได้อนุญาตกล้อง — เปิดสิทธิ์กล้องให้ MoonCam ในการตั้งค่าเบราว์เซอร์/แอป แล้วกดลองอีกครั้ง" : "เปิดกล้องไม่ได้: " + (e && e.message || e);
     noCam(msg);
@@ -131,17 +147,63 @@ async function startCamera(opts = {}) {
 }
 function noCam(msg) { $("#vf-nocam").hidden = false; $("#nocam-msg").textContent = msg; }
 
-function renderLensRow() {
-  const row = $("#lens-row"); row.textContent = "";
-  const lenses = CAM.cam.lenses;
-  if (CAM.cam.facing !== "user" && lenses.length > 1) {
-    lenses.forEach(L => { const b = el("button", "pill glass" + ((CAM.cam.deviceId === L.id || (!CAM.cam.deviceId && L.tag === "1×")) ? " on" : ""), L.tag); b.title = L.label;
-      b.onclick = () => { haptic(); startCamera({deviceId: L.id}); }; row.appendChild(b); });
-  } else {
-    const z = CAM.manualCaps().zoom;
-    if (z) [1, 2, 3, 5].filter(v => v >= z.min && v <= z.max).forEach(v => { const b = el("button", "pill glass" + ((CAM.cam.manual.zoom || 1) === v ? " on" : ""), v + "×");
-      b.onclick = () => { haptic(); CAM.setZoom(v); renderLensRow(); }; row.appendChild(b); });
+// ---------------------------------------------------------------- layout: preview box sized to the ratio (WYSIWYG with the crop)
+function layoutCam() {
+  const root = $("#v-cam"), vw = root.clientWidth || innerWidth, vh = root.clientHeight || innerHeight, TOP = 56, BOT = 214, r = ratioVal();
+  const avail = vh - TOP - BOT;
+  let w, h, top;
+  if (prefs.ratio === "full") { w = vw; h = vh; top = 0; }
+  else if (vw > vh) { h = Math.min(avail, vw / r); w = h * r; top = TOP; }
+  else {
+    w = vw; h = vw / r;
+    if (h <= avail) top = TOP + Math.max(0, (avail - h) * .25);
+    else if (h <= vh - TOP) top = TOP;
+    else if (h <= vh) top = (vh - h) / 2;
+    else { h = vh; w = h * r; top = 0; }
   }
+  const vf = $("#vf"); Object.assign(vf.style, {width: w + "px", height: h + "px", top: top + "px", left: (vw - w) / 2 + "px"});
+  root.classList.toggle("over", top + h > vh - BOT + 8);
+  $("#c-ratio").textContent = prefs.ratio === "full" ? "FULL" : prefs.ratio;
+}
+
+// ---------------------------------------------------------------- zoom (hardware where possible, digital beyond / otherwise)
+function zoomLimits() {
+  const z = CAM.manualCaps().zoom, ultra = CAM.cam.facing !== "user" && CAM.cam.lenses.find(l => l.tag.startsWith("0.5"));
+  const min = camState.ultra ? .5 : z && z.min < 1 ? z.min : ultra ? .5 : 1;
+  const max = Math.max(z ? z.max : 1, 10);
+  return {z, ultra, min, max};
+}
+function setZoomLevel(v, {show = true} = {}) {
+  const L = zoomLimits();
+  v = Math.max(L.min, Math.min(L.max, v));
+  if (camState.ultra) { // on the ultra-wide lens: digital only, relative to 0.5×
+    camState.digital = Math.max(1, v / .5); camState.zoom = .5 * camState.digital;
+  } else if (L.z) {
+    const hz = Math.max(L.z.min, Math.min(L.z.max, v)); hwZoom(hz); camState.digital = Math.max(1, v / hz); camState.zoom = Math.max(v, L.z.min);
+  } else { camState.digital = Math.max(1, v); camState.zoom = camState.digital; }
+  applyLivePreview(); renderZoom();
+  if (show) { const t = $("#vf-zoom"); t.textContent = camState.zoom.toFixed(1).replace(/\.0$/, "") + "×"; t.hidden = false; clearTimeout(setZoomLevel.t); setZoomLevel.t = setTimeout(() => t.hidden = true, 700); }
+}
+function renderZoom() {
+  const L = zoomLimits(), pill = $("#zoom-pill"); pill.textContent = "";
+  const stops = [];
+  if (L.min < 1) stops.push(+L.min.toFixed(1));
+  stops.push(1, 2); if (L.max >= 4) stops.push(4);
+  if (CAM.cam.facing === "user") stops.splice(0, stops.length, 1, 2);
+  const cur = camState.zoom;
+  // the stop the current zoom belongs to shows the live value (like the phone's own camera)
+  let active = 0; stops.forEach((s, i) => { if (cur >= s - .05) active = i; });
+  stops.forEach((s, i) => {
+    if (i) pill.appendChild(el("span", "dots", "···"));
+    const on = i === active, txt = on ? (Math.abs(cur - s) < .05 ? s + "x" : cur.toFixed(1) + "x") : String(s);
+    const b = el("button", on ? "on" : "", txt.replace(".0x", "x"));
+    b.onclick = e => { e.stopPropagation(); haptic();
+      if (s < 1 && !(L.z && L.z.min <= s) && L.ultra && !camState.ultra) return startCamera({deviceId: L.ultra.id});
+      if (s >= 1 && camState.ultra) return startCamera({facing: "environment"}).then(() => setZoomLevel(s));
+      setZoomLevel(s);
+    };
+    pill.appendChild(b);
+  });
 }
 
 function liveFilter(a) {
@@ -152,32 +214,28 @@ function liveFilter(a) {
   return `brightness(${b.toFixed(3)}) contrast(${c.toFixed(3)}) saturate(${s.toFixed(3)}) sepia(${warm.toFixed(3)}) hue-rotate(${hue.toFixed(1)}deg)` + (a.mono ? " grayscale(1)" : "");
 }
 function applyLivePreview() {
-  const a = gradeAdj(), lens = lensOf(), body = bodyOf(), v = $("#video");
+  layoutCam();
+  const a = gradeAdj(camSoft()), lens = lensOf(), body = bodyOf(), v = $("#video");
   let f = liveFilter(a); if (lens.soft || body.soft) f += " blur(.4px)";
   v.style.filter = f;
-  const mirror = $("#vf").classList.contains("front") ? -1 : 1, crop = lens.crop || 1;
-  v.style.transform = `scale(${mirror * crop},${crop})`;
+  const mirror = $("#vf").classList.contains("front") ? -1 : 1, k = (lens.crop || 1) * camState.digital;
+  v.style.transform = `scale(${mirror * k},${k})`;
   const vig = Math.max(a.vignette / 100, lens.vig || 0);
   $("#vf-vig").style.background = lens.circle ? "radial-gradient(circle at center,transparent 47%,#000 48%)" : vig > 0 ? `radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,${(vig * .7).toFixed(2)}) 100%)` : "none";
   $("#vf-scan").hidden = !body.scan;
   $("#vf-grid").hidden = !prefs.grid; $("#vf-center").hidden = !prefs.center;
-  $("#c-grid").classList.toggle("on", prefs.grid); $("#c-center").classList.toggle("on", prefs.center);
-  // ratio frame
-  const fr = $("#vf-frame"), vf = $("#vf").getBoundingClientRect(), r = RATIOS[prefs.ratio];
-  let fw = vf.width, fh = vf.width / r; if (fh > vf.height) { fh = vf.height; fw = fh * r; }
-  fr.style.width = fw + "px"; fr.style.height = fh + "px";
-  $("#c-ratio").title = prefs.ratio;
+  $("#c-grid").classList.toggle("on", prefs.grid || prefs.center);
 }
 function updateHud() {
   const hud = $("#cam-hud"); hud.textContent = "";
   const m = CAM.cam.manual, add = t => hud.appendChild(el("span", "pill glass num", t));
-  if (prefs.ratio !== "3:4") add(prefs.ratio);
-  if (prefs.timer) add(prefs.timer + "s");
-  if (prefs.flash !== "off") add(prefs.flash === "torch" ? "ไฟฉาย" : "แฟลช");
-  if (m.iso) add("ISO " + m.iso); if (m.shutter) add(CAM.formatShutter(m.shutter)); if (m.wb) add(m.wb + "K"); if (m.ev) add((m.ev > 0 ? "+" : "") + m.ev + " EV");
+  if (camState.mode === "pro") { /* values live in the quick bar */ }
+  else { if (camState.ev) add((camState.ev > 0 ? "+" : "") + camState.ev.toFixed(1) + " EV"); if (camState.wb) add(camState.wb + "K"); }
   if (S.lens !== "natural") add(lensOf().name); if (S.body !== "none") add(bodyOf().name);
   if (prefs.gps && camState.lastPos) add("📍");
-  $("#c-flash").classList.toggle("on", prefs.flash !== "off"); $("#c-timer").classList.toggle("on", !!prefs.timer);
+  $("#c-flash").classList.toggle("on", prefs.flash !== "off");
+  $("#c-flash").innerHTML = prefs.flash === "torch" ? icon("sun") : icon("flash") + (prefs.flash === "off" ? `<span class="slash"></span>` : "");
+  $("#c-timer").classList.toggle("on", !!prefs.timer); $("#c-timer-n").textContent = prefs.timer || "";
 }
 // live look thumbnails from a real frame of the camera
 function snapshotThumbs() {
@@ -192,12 +250,144 @@ function renderCamLooks() {
   const list = [allLooks().find(l => l.id === "original")].concat(PRESETS.filter(l => l.cat === "trend"), mine, PRESETS.filter(l => l.cat !== "trend" && l.id !== "original"));
   list.forEach(l => {
     const b = el("button", "lchip" + (l.id === S.lookId ? " on" : "")); b.appendChild(thumbFor(l, src, 52)); b.appendChild(el("span", null, l.name));
-    b.onclick = () => { haptic(); if (l.id === S.lookId && l.id !== "original") { $("#cam-strength").hidden = !$("#cam-strength").hidden; return; } applyLook(l); applyLivePreview(); renderCamLooks(); updateHud(); toast(l.name + (l.desc ? " — " + l.desc : ""), 1800); };
+    b.onclick = () => { haptic(); if (l.id === S.lookId && l.id !== "original") { openRuler("str"); return; } applyLook(l); applyLivePreview(); renderCamLooks(); renderQbar(); updateHud(); toast(l.name + (l.desc ? " — " + l.desc : ""), 1600); };
     strip.appendChild(b);
   });
-  const on = strip.querySelector(".on"); if (on) on.scrollIntoView({inline: "center", block: "nearest"});
-  $("#cam-str").value = S.strength; $("#cam-str-o").textContent = S.strength + "%";
+  const on = strip.querySelector(".on"); if (on && !strip.hidden) on.scrollIntoView({inline: "center", block: "nearest"});
 }
+
+// ---------------------------------------------------------------- quick bar + ruler (ProCam-style)
+const fmtEV = v => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toFixed(1);
+function qItems() {
+  const mc = CAM.manualCaps(), m = CAM.cam.manual, pro = camState.mode === "pro";
+  const it = [{k: "look", t: "LOOK", v: S.lookName, set: S.lookId !== "original"}, {k: "str", t: "แรง", v: S.strength + "%", set: S.strength !== 100},
+    {k: "ev", t: "EV", v: camState.ev ? fmtEV(camState.ev) : "0.0", set: !!camState.ev}, {k: "wb", t: "WB", v: camState.wb ? camState.wb + "K" : "auto", set: !!camState.wb}];
+  if (pro) it.push({k: "iso", t: "ISO", v: m.iso ? Math.round(m.iso) : "auto", set: !!m.iso, off: !(mc.iso && mc.exposureManual)},
+    {k: "sh", t: "S", v: m.shutter ? CAM.formatShutter(m.shutter) : "auto", set: !!m.shutter, off: !(mc.shutter && mc.exposureManual)},
+    {k: "focus", t: "F", v: m.focus != null ? (+m.focus).toFixed(2) : "AF", set: m.focus != null, off: !(mc.focus && mc.focusManual)});
+  it.push({k: "lens", t: "LENS", v: S.lens !== "natural" ? lensOf().name : S.body !== "none" ? bodyOf().name : "ปกติ", set: S.lens !== "natural" || S.body !== "none"});
+  return it;
+}
+function renderQbar() {
+  const q = $("#qbar"); q.textContent = "";
+  qItems().forEach(i => {
+    const open = (i.k === "look" && camState.tray === "looks") || ($("#ruler").hidden === false && ruler.k === i.k);
+    const b = el("button", [i.set ? "set" : "", open ? "on" : "", i.off ? "off" : ""].join(" "), `<b>${i.t}</b><small>${i.v}</small>`);
+    b.onclick = () => { haptic();
+      if (i.off) return toast(`${i.t}: มือถือ/เบราว์เซอร์นี้ไม่เปิดให้ปรับเอง`, 1600);
+      if (i.k === "lens") return openLensSheet();
+      if (i.k === "look") return setTray(camState.tray === "looks" ? "none" : "looks");
+      if (open) return setTray("none");
+      openRuler(i.k);
+    };
+    q.appendChild(b);
+  });
+  $("#c-looks").classList.toggle("on", camState.tray === "looks");
+}
+function setTray(t) {
+  camState.tray = t; if (t !== "ruler") { prefs.tray = t; savePrefs(); }
+  $("#cam-looks").hidden = t !== "looks"; $("#ruler").hidden = t !== "ruler";
+  if (t === "looks") renderCamLooks();
+  renderQbar();
+}
+const ruler = {k: null, o: null, p: 0, W: 320};
+function rulerSpec(k) {
+  const mc = CAM.manualCaps(), m = CAM.cam.manual;
+  if (k === "str") return {name: "ความแรง Look", min: 0, max: 150, step: 1, get: () => S.strength, fmt: v => v + "%", set: v => { S.strength = v; prefs.strength = v; applyLivePreview(); }, auto: () => 100, autoLabel: "100%"};
+  if (k === "ev") { const r = mc.ev || {min: -3, max: 3, step: .1}; return {name: mc.ev ? "EV (กล้องจริง)" : "EV", min: r.min, max: r.max, step: r.step || .1, get: () => camState.ev, fmt: fmtEV,
+    set: v => { camState.ev = v; if (mc.ev) hwEV(v); applyLivePreview(); }, auto: () => 0, autoLabel: "0"}; }
+  if (k === "wb") { const hw = mc.wb && mc.wbManual, r = hw ? mc.wb : {min: 2000, max: 9000}; return {name: hw ? "WB (กล้องจริง)" : "WB", min: Math.max(2000, r.min), max: Math.min(10000, r.max), step: 50, get: () => camState.wb || 5500, fmt: v => v + "K",
+    set: v => { camState.wb = v; if (hw) hwWB(v); applyLivePreview(); }, auto: () => { camState.wb = 0; if (hw) CAM.autoWB(); applyLivePreview(); return null; }, autoLabel: "AUTO", isAuto: () => !camState.wb}; }
+  if (k === "iso") return {name: "ISO", min: mc.iso.min, max: mc.iso.max, step: 1, log: true, get: () => m.iso || 100, fmt: v => Math.round(v), set: v => hwISO(v), auto: () => { CAM.autoExposure(); return null; }, autoLabel: "AUTO", isAuto: () => !m.iso};
+  if (k === "sh") return {name: "Shutter", min: mc.shutter.min, max: Math.min(mc.shutter.max, 10000), step: 1, log: true, get: () => m.shutter || 80, fmt: v => CAM.formatShutter(v), set: v => hwSh(v), auto: () => { CAM.autoExposure(); return null; }, autoLabel: "AUTO", isAuto: () => !m.shutter};
+  if (k === "focus") return {name: "Focus", min: mc.focus.min, max: mc.focus.max, step: mc.focus.step || .01, get: () => m.focus != null ? m.focus : mc.focus.min, fmt: v => (+v).toFixed(2), set: v => hwFocus(v), auto: () => { CAM.autoFocus(); return null; }, autoLabel: "AF", isAuto: () => m.focus == null};
+}
+const r2p = (o, v) => o.log ? Math.log(v / o.min) / Math.log(o.max / o.min) : (v - o.min) / (o.max - o.min);
+const p2v = (o, p) => { let v = o.log ? o.min * Math.pow(o.max / o.min, p) : o.min + (o.max - o.min) * p; v = Math.round(v / o.step) * o.step; return +Math.max(o.min, Math.min(o.max, v)).toFixed(4); };
+function openRuler(k) {
+  const o = rulerSpec(k); if (!o) return;
+  ruler.k = k; ruler.o = o; ruler.p = Math.max(0, Math.min(1, r2p(o, o.get())));
+  $("#ruler-name").textContent = o.name; $("#ruler-auto").textContent = o.autoLabel || "AUTO";
+  setTray("ruler"); drawRuler();
+}
+function drawRuler() {
+  const o = ruler.o; if (!o) return;
+  $("#ruler-ticks").style.transform = `translateX(${-ruler.p * ruler.W}px)`;
+  $("#ruler-val").textContent = o.isAuto && o.isAuto() ? (o.autoLabel || "AUTO") : o.fmt(p2v(o, ruler.p));
+}
+(() => {
+  const t = $("#ruler-track"); let d = null;
+  t.addEventListener("pointerdown", e => { d = {x: e.clientX, p: ruler.p}; t.setPointerCapture(e.pointerId); });
+  t.addEventListener("pointermove", e => { if (!d || !ruler.o) return; const p = Math.max(0, Math.min(1, d.p - (e.clientX - d.x) / ruler.W)); const before = p2v(ruler.o, ruler.p); ruler.p = p; const v = p2v(ruler.o, p);
+    if (v !== before) { ruler.o.set(v); if (Math.round(v * 10) % 10 === 0) haptic(3); } drawRuler(); renderQbarSoon(); updateHud(); });
+  const end = () => { if (d) { d = null; savePrefs(); } }; t.addEventListener("pointerup", end); t.addEventListener("pointercancel", end);
+  $("#ruler-auto").onclick = () => { haptic(); const o = ruler.o; if (!o) return; const v = o.auto(); if (v != null) { o.set(v); } ruler.p = Math.max(0, Math.min(1, r2p(o, o.get()))); drawRuler(); renderQbar(); updateHud(); };
+})();
+let qbT; function renderQbarSoon() { clearTimeout(qbT); qbT = setTimeout(renderQbar, 60); }
+
+// ---------------------------------------------------------------- quick settings panel
+function renderQS() {
+  const q = $("#qs"); q.textContent = "";
+  const tile = (title, val, on, fn) => { const b = el("button", on ? "on" : "", `<b>${val}</b>${title}`); b.onclick = () => { haptic(); fn(); renderQS(); applyLivePreview(); updateHud(); }; q.appendChild(b); };
+  const RK = Object.keys(RATIOS);
+  tile("สัดส่วน", prefs.ratio === "full" ? "FULL" : prefs.ratio, false, () => { prefs.ratio = RK[(RK.indexOf(prefs.ratio) + 1) % RK.length]; savePrefs(); });
+  tile("ตั้งเวลา", prefs.timer ? prefs.timer + "s" : "ปิด", !!prefs.timer, () => { prefs.timer = prefs.timer === 0 ? 3 : prefs.timer === 3 ? 10 : 0; savePrefs(); });
+  tile("เส้นตาราง", prefs.grid ? "3×3" : "ปิด", prefs.grid, () => { prefs.grid = !prefs.grid; savePrefs(); });
+  tile("จุดกลาง", prefs.center ? "เปิด" : "ปิด", prefs.center, () => { prefs.center = !prefs.center; savePrefs(); });
+  tile("ระดับน้ำ", prefs.level ? "เปิด" : "ปิด", prefs.level, () => { prefs.level = !prefs.level; savePrefs(); level(prefs.level); });
+  tile("ฮิสโตแกรม", prefs.histo ? "เปิด" : "ปิด", prefs.histo, () => { prefs.histo = !prefs.histo; savePrefs(); histo(prefs.histo); });
+  tile("เสียงชัตเตอร์", prefs.sound ? "เปิด" : "ปิด", prefs.sound, () => { prefs.sound = !prefs.sound; savePrefs(); });
+  tile("หมุดตำแหน่ง", prefs.gps ? "เปิด" : "ปิด", prefs.gps, () => setGps(!prefs.gps));
+  tile("กล้องหน้า", prefs.mirror ? "กระจก" : "ตามจริง", prefs.mirror, () => { prefs.mirror = !prefs.mirror; savePrefs(); });
+  tile("แตะเพื่อถ่าย", prefs.tapShoot ? "เปิด" : "ปิด", prefs.tapShoot, () => { prefs.tapShoot = !prefs.tapShoot; savePrefs(); });
+  tile("Device Sync", prefs.deviceProfile ? "เปิด" : "ปิด", prefs.deviceProfile, () => { prefs.deviceProfile = !prefs.deviceProfile; savePrefs(); });
+  tile("ม้วนฟิล์ม", prefs.rollSize + " รูป", false, () => { prefs.rollSize = prefs.rollSize === 24 ? 36 : 24; savePrefs(); refreshRollChip(); });
+}
+function toggleQS(force) { const q = $("#qs"), open = force != null ? force : q.hidden; q.hidden = !open; $("#c-qs").classList.toggle("on", open); if (open) renderQS(); }
+
+// ---------------------------------------------------------------- level (horizon) & live histogram
+let levelOn = false;
+function onMotion(e) {
+  const g = e.accelerationIncludingGravity; if (!g || g.x == null) return;
+  const lv = $("#vf-level"); let ang = Math.atan2(-g.x, g.y) * 180 / Math.PI; // device roll
+  let dev = ((ang % 90) + 135) % 90 - 45; // distance to the nearest 90°
+  if (Math.hypot(g.x, g.y) < 4) { lv.hidden = true; return; } // phone lying flat
+  lv.hidden = false; lv.querySelector("i").style.transform = `rotate(${-dev}deg)`; lv.classList.toggle("ok", Math.abs(dev) < 1);
+  lv.querySelector("b").textContent = Math.abs(dev) < 1 ? "0°" : Math.round(Math.abs(dev)) + "°";
+}
+function level(on) {
+  if (on === levelOn) return; levelOn = on;
+  if (on) { const go = () => window.addEventListener("devicemotion", onMotion);
+    if (window.DeviceMotionEvent && DeviceMotionEvent.requestPermission) DeviceMotionEvent.requestPermission().then(r => r === "granted" && go()).catch(() => {}); else go(); }
+  else { window.removeEventListener("devicemotion", onMotion); $("#vf-level").hidden = true; }
+}
+let histoT = null;
+function histo(on) {
+  const c = $("#histo"); c.hidden = !on; clearInterval(histoT); histoT = null; if (!on) return;
+  const s = document.createElement("canvas"); s.width = 64; s.height = 48; const sx = s.getContext("2d", {willReadFrequently: true}), x = c.getContext("2d");
+  histoT = setInterval(() => {
+    const v = $("#video"); if (!v.videoWidth || $("#v-cam").hidden) return;
+    sx.filter = v.style.filter || "none"; sx.drawImage(v, 0, 0, 64, 48); const d = sx.getImageData(0, 0, 64, 48).data, hR = new Array(64).fill(0), hG = new Array(64).fill(0), hB = new Array(64).fill(0);
+    for (let i = 0; i < d.length; i += 4) { hR[d[i] >> 2]++; hG[d[i + 1] >> 2]++; hB[d[i + 2] >> 2]++; }
+    const mx = Math.max(...hR, ...hG, ...hB) || 1; x.clearRect(0, 0, 128, 48); x.globalCompositeOperation = "lighter";
+    [[hR, "rgba(255,80,80,.7)"], [hG, "rgba(80,255,120,.6)"], [hB, "rgba(90,140,255,.7)"]].forEach(([h, col]) => { x.fillStyle = col; x.beginPath(); x.moveTo(0, 48); h.forEach((n, i) => x.lineTo(i * 2, 48 - Math.sqrt(n / mx) * 44)); x.lineTo(128, 48); x.fill(); });
+    x.globalCompositeOperation = "source-over";
+  }, 280);
+}
+
+// ---------------------------------------------------------------- shutter sound
+let actx = null;
+function clickSound() {
+  if (!prefs.sound) return;
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); const n = actx.sampleRate * .09, buf = actx.createBuffer(1, n, actx.sampleRate), ch = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) { const t = i / n; ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 3) * (t < .45 ? 1 : .55) * (i > n * .42 && i < n * .5 ? 1.6 : 1); }
+    const src = actx.createBufferSource(), g = actx.createGain(), f = actx.createBiquadFilter(); f.type = "bandpass"; f.frequency.value = 2400; f.Q.value = .7; g.gain.value = .5;
+    src.buffer = buf; src.connect(f).connect(g).connect(actx.destination); src.start(); } catch (e) {}
+}
+function setAlbumThumb(canvas) {
+  try { const t = scaled(canvas, 120); const url = t.toDataURL("image/jpeg", .7); LS.set("thumb", url); showAlbumThumb(url); } catch (e) {}
+}
+function showAlbumThumb(url) { const a = $("#c-album"); if (!url) return; a.style.backgroundImage = `url(${url})`; a.classList.add("has"); }
 
 function watchGps(on) {
   if (!navigator.geolocation) return;
@@ -206,31 +396,40 @@ function watchGps(on) {
 }
 
 async function shoot() {
-  if (!CAM.cam.stream) return;
-  haptic(15);
-  if (prefs.timer) { const c = $("#vf-count"); c.hidden = false; for (let i = prefs.timer; i > 0; i--) { c.textContent = i; await new Promise(r => setTimeout(r, 1000)); } c.hidden = true; }
-  const f = $("#vf-flash"); f.style.opacity = ".85"; setTimeout(() => f.style.opacity = "0", 70);
-  const mirror = $("#vf").classList.contains("front");
-  const {blob, canvas} = await CAM.capture({flash: prefs.flash === "on", mirror});
-  const shot = cropToRatio(canvas, RATIOS[prefs.ratio]);
-  const when = new Date(), gps = prefs.gps ? camState.lastPos : null;
-  if (camState.mode === "roll") {
-    const jpeg = blob && shot === canvas ? blob : await new Promise(r => shot.toBlob(r, "image/jpeg", .95));
-    await DB.rollAdd({id: Date.now() + "_" + Math.random().toString(36).slice(2, 6), time: when.getTime(), blob: jpeg, gps, settings: JSON.parse(snap()), developed: false});
-    await refreshRollChip(); toast("เก็บลงม้วนฟิล์มแล้ว 🎞 ยังไม่เห็นภาพจนกว่าจะล้างฟิล์ม", 1800);
-    return;
-  }
-  const exif = blob && shot === canvas ? await EX.readExif(blob) : null;
-  await openEditor(shot, {blob: blob && shot === canvas ? blob : null, exif, gps, when, fromCamera: true, name: "MoonCam"});
+  if (!CAM.cam.stream || shoot.busy) return;
+  shoot.busy = true; haptic(15);
+  try {
+    if (prefs.timer) { const c = $("#vf-count"); c.hidden = false; for (let i = prefs.timer; i > 0; i--) { c.textContent = i; await new Promise(r => setTimeout(r, 1000)); } c.hidden = true; }
+    clickSound();
+    const f = $("#vf-flash"); f.style.opacity = ".85"; setTimeout(() => f.style.opacity = "0", 70);
+    const front = $("#vf").classList.contains("front"), mirror = front && prefs.mirror !== false;
+    const {blob, canvas} = await CAM.capture({flash: prefs.flash === "on", mirror});
+    let shot = cropToRatio(canvas, ratioVal());
+    if (camState.digital > 1.01) { const k = camState.digital, w = Math.round(shot.width / k), h = Math.round(shot.height / k), o = newCanvas(w, h); o.getContext("2d").drawImage(shot, (shot.width - w) / 2, (shot.height - h) / 2, w, h, 0, 0, w, h); shot = o; }
+    const untouched = blob && shot === canvas;
+    const when = new Date(), gps = prefs.gps ? camState.lastPos : null;
+    S.cam = camSoft();
+    setAlbumThumb(shot);
+    if (camState.mode === "roll") {
+      const jpeg = untouched ? blob : await new Promise(r => shot.toBlob(r, "image/jpeg", .95));
+      await DB.rollAdd({id: Date.now() + "_" + Math.random().toString(36).slice(2, 6), time: when.getTime(), blob: jpeg, gps, settings: JSON.parse(snap()), developed: false});
+      await refreshRollChip(); toast("เก็บลงม้วนฟิล์มแล้ว 🎞 ยังไม่เห็นภาพจนกว่าจะล้างฟิล์ม", 1800);
+      return;
+    }
+    const exif = untouched ? await EX.readExif(blob) : null;
+    await openEditor(shot, {blob: untouched ? blob : null, exif, gps, when, fromCamera: true, name: "MoonCam"});
+  } finally { shoot.busy = false; }
 }
+window.__mcShutter = () => { if (!$("#v-cam").hidden) shoot(); };
 
 // ================================================================== EDITOR
 async function openEditor(img, {blob = null, exif = null, gps = null, when = new Date(), fromCamera = false, name = "MoonCam"} = {}) {
+  if (!fromCamera) S.cam = {exposure: 0, temp: 0};
   session.full = scaled(img, device.exportMax); session.prev = scaled(session.full, device.preview);
   session.blob = blob; session.exif = exif; session.gps = gps || EX.gpsFromExif(exif); session.when = when; session.fromCamera = fromCamera; session.name = name; session.faces = null;
   memo.clear(); thumbCache.clear(); session.analysis = null;
   hist.u = []; hist.r = []; hist.last = null; commit();
-  show("#v-edit"); renderPanel(); requestRender();
+  viewZoom(1, 0, 0); show("#v-edit"); renderPanel(); requestRender();
   if (F.hasBeauty(S.beauty)) ensureFaces();
 }
 async function ensureFaces() {
@@ -530,28 +729,10 @@ function openSheet(title, body) { $("#sheet-title").textContent = title; const s
 function closeSheet() { $("#sheet").classList.remove("open"); $("#scrim").classList.remove("open"); }
 $("#scrim").onclick = closeSheet; $("#sheet-close").onclick = closeSheet;
 
-function openProSheet() {
-  const mc = CAM.manualCaps(), m = CAM.cam.manual, b = el("div");
-  const na = "เครื่องนี้ไม่รองรับ";
-  const row = (title, cap, val, min, max, step, disp, set, auto) => {
-    b.appendChild(slider(title, "pro_" + title, val, min, max, v => set(v), {step, disp, noRender: true, disabled: !cap, onChange: updateHud}));
-    if (!cap) b.lastChild.querySelector("output").textContent = "—";
-    if (cap && auto) { const a = button("อัตโนมัติ", "chip", async () => { await auto(); updateHud(); openProSheet(); }); a.style.margin = "-4px 0 8px"; b.appendChild(a); }
-  };
-  b.appendChild(note(`โหมดโปร: ปรับค่ากล้องจริงตามที่มือถือ+เบราว์เซอร์อนุญาต · ความละเอียดสูงสุด ${mc.maxW && mc.maxH ? mc.maxW + "×" + mc.maxH : "ไม่ทราบ"}`));
-  row("EV", mc.ev, m.ev || 0, mc.ev ? mc.ev.min : -2, mc.ev ? mc.ev.max : 2, mc.ev ? mc.ev.step || .1 : .1, v => (v > 0 ? "+" : "") + (+v).toFixed(1), v => { CAM.setEV(v); }, () => CAM.setEV(0));
-  row("ISO", mc.iso && mc.exposureManual, m.iso || (mc.iso ? mc.iso.min : 100), mc.iso ? mc.iso.min : 100, mc.iso ? mc.iso.max : 3200, 1, v => Math.round(v), v => CAM.setISO(v), CAM.autoExposure);
-  const sh = mc.shutter; row("Shutter", sh && mc.exposureManual, m.shutter || (sh ? Math.min(sh.max, 80) : 80), sh ? sh.min : 1, sh ? Math.min(sh.max, 5000) : 5000, 1, v => CAM.formatShutter(v), v => CAM.setShutter(v), CAM.autoExposure);
-  row("WB", mc.wb && mc.wbManual, m.wb || 5500, mc.wb ? mc.wb.min : 2500, mc.wb ? mc.wb.max : 7500, 50, v => Math.round(v) + "K", v => CAM.setWB(v), CAM.autoWB);
-  const fc = mc.focus; row("Focus", fc && mc.focusManual, m.focus != null ? m.focus : (fc ? fc.min : 0), fc ? fc.min : 0, fc ? fc.max : 1, fc ? (fc.step || .01) : .01, v => (+v).toFixed(2), v => CAM.setFocus(v), CAM.autoFocus);
-  row("Zoom", mc.zoom, m.zoom || 1, mc.zoom ? mc.zoom.min : 1, mc.zoom ? mc.zoom.max : 1, mc.zoom ? (mc.zoom.step || .1) : .1, v => (+v).toFixed(1) + "×", v => CAM.setZoom(v));
-  b.appendChild(note("ค่าที่ขึ้น “—” คือมือถือ/เบราว์เซอร์นี้ไม่เปิดให้ปรับเอง แอปจะไม่แกล้งทำว่าปรับได้"));
-  openSheet("Pro · แมนนวล", b);
-}
 function openLensSheet() {
   const b = el("div");
-  b.appendChild(label("เลนส์จำลอง")); b.appendChild(chips(LENSES.map(l => [l.id, l.name]), S.lens, k => { S.lens = k; applyLivePreview(); updateHud(); openLensSheet(); }, "scroll")); b.appendChild(note(lensOf().desc));
-  b.appendChild(label("กล้องจำลอง")); b.appendChild(chips(BODIES.map(x => [x.id, x.name]), S.body, k => { S.body = k; applyLivePreview(); updateHud(); openLensSheet(); }, "scroll")); b.appendChild(note(bodyOf().desc));
+  b.appendChild(label("เลนส์จำลอง")); b.appendChild(chips(LENSES.map(l => [l.id, l.name]), S.lens, k => { S.lens = k; applyLivePreview(); updateHud(); renderQbar(); openLensSheet(); }, "scroll")); b.appendChild(note(lensOf().desc));
+  b.appendChild(label("กล้องจำลอง")); b.appendChild(chips(BODIES.map(x => [x.id, x.name]), S.body, k => { S.body = k; applyLivePreview(); updateHud(); renderQbar(); openLensSheet(); }, "scroll")); b.appendChild(note(bodyOf().desc));
   if (CAM.cam.lenses.length > 1) { b.appendChild(label("กล้องจริงของมือถือ")); b.appendChild(chips(CAM.cam.lenses.map(L => [L.id, L.tag + " · " + L.label.slice(0, 24)]), CAM.cam.deviceId, k => { closeSheet(); startCamera({deviceId: k}); })); }
   b.appendChild(note("ภาพสดเป็นค่าประมาณ — ภาพที่ถ่ายได้ใส่เลนส์/กล้องจำลองเต็มรูปแบบ"));
   openSheet("เลนส์ & กล้อง", b);
@@ -700,49 +881,92 @@ async function dumpExport(forShare) {
 
 // ================================================================== events
 $("#shutter").onclick = shoot;
-$("#c-flip").onclick = () => { haptic(); startCamera({facing: CAM.cam.facing === "user" ? "environment" : "user"}); };
+$("#c-flip").onclick = () => { haptic(); const b = $("#c-flip"); b.classList.remove("spin"); void b.offsetWidth; b.classList.add("spin"); startCamera({facing: CAM.cam.facing === "user" ? "environment" : "user"}); };
 $("#c-album").onclick = openAlbumSheet;
-$("#c-lenses").onclick = openLensSheet;
-$("#c-settings").onclick = openSettings;
-$("#c-grid").onclick = () => { prefs.grid = !prefs.grid; savePrefs(); applyLivePreview(); };
-$("#c-center").onclick = () => { prefs.center = !prefs.center; savePrefs(); applyLivePreview(); };
-$("#c-timer").onclick = () => { prefs.timer = prefs.timer === 0 ? 3 : prefs.timer === 3 ? 10 : 0; savePrefs(); updateHud(); toast(prefs.timer ? `ตั้งเวลา ${prefs.timer} วินาที` : "ปิดตั้งเวลา", 1200); };
-$("#c-ratio").onclick = () => { const ks = Object.keys(RATIOS); prefs.ratio = ks[(ks.indexOf(prefs.ratio) + 1) % ks.length]; savePrefs(); applyLivePreview(); updateHud(); toast("สัดส่วน " + prefs.ratio, 1000); };
-$("#c-flash").onclick = async () => {
+$("#c-settings").onclick = () => { toggleQS(false); openSettings(); };
+$("#c-qs").onclick = () => { haptic(); toggleQS(); };
+$("#c-looks").onclick = () => { haptic(); setTray(camState.tray === "looks" ? "none" : "looks"); };
+$("#c-grid").onclick = () => { haptic(); // off → 3×3 → 3×3 + centre → off
+  if (!prefs.grid && !prefs.center) prefs.grid = true; else if (prefs.grid && !prefs.center) prefs.center = true; else { prefs.grid = false; prefs.center = false; }
+  savePrefs(); applyLivePreview(); };
+$("#c-timer").onclick = () => { haptic(); prefs.timer = prefs.timer === 0 ? 3 : prefs.timer === 3 ? 10 : 0; savePrefs(); updateHud(); toast(prefs.timer ? `ตั้งเวลา ${prefs.timer} วินาที` : "ปิดตั้งเวลา", 1000); };
+$("#c-ratio").onclick = () => { haptic(); const ks = Object.keys(RATIOS); prefs.ratio = ks[(ks.indexOf(prefs.ratio) + 1) % ks.length]; savePrefs(); applyLivePreview(); };
+$("#c-flash").onclick = async () => { haptic();
   const torch = CAM.manualCaps().torch, order = torch ? ["off", "on", "torch"] : ["off", "on"]; prefs.flash = order[(order.indexOf(prefs.flash) + 1) % order.length]; savePrefs();
-  if (torch) await CAM.setTorch(prefs.flash === "torch"); updateHud(); toast({off: "ปิดแฟลช", on: "แฟลชตอนถ่าย", torch: "เปิดไฟฉาย"}[prefs.flash], 1000);
+  if (torch) await CAM.setTorch(prefs.flash === "torch"); updateHud(); toast({off: "ปิดแฟลช", on: "แฟลชตอนถ่าย", torch: "เปิดไฟฉาย"}[prefs.flash], 900);
 };
-$("#cam-str").oninput = e => { S.strength = +e.target.value; prefs.strength = S.strength; $("#cam-str-o").textContent = S.strength + "%"; applyLivePreview(); };
-$("#cam-str").onchange = savePrefs;
-$("#cam-modes").onclick = e => {
-  const b = e.target.closest("[data-mode]"); if (!b) return; haptic();
-  const mode = b.dataset.mode; document.querySelectorAll("#cam-modes button").forEach(x => x.classList.toggle("on", x === b));
+const MODES = ["roll", "digicam", "photo", "pro"];
+function setMode(mode) {
+  if (mode === camState.mode) return; haptic();
+  document.querySelectorAll("#cam-modes button").forEach(x => x.classList.toggle("on", x.dataset.mode === mode));
   if (camState.mode === "digicam" && mode !== "digicam") { S.body = camState.prevBody || "none"; const l = allLooks().find(x => x.id === camState.prevLook); if (l) applyLook(l, {commit: false}); }
-  if (mode === "digicam") { camState.prevBody = S.body; camState.prevLook = S.lookId; S.body = "ccd"; applyLook(PRESETS.find(l => l.id === "y2k_flash"), {commit: false}); toast("DIGICAM — ดิจิคอม CCD ยุค 2000 แฟลชจัด วันที่สีส้ม", 1800); }
+  if (mode === "digicam") { camState.prevBody = S.body; camState.prevLook = S.lookId; S.body = "ccd"; applyLook(PRESETS.find(l => l.id === "y2k_flash"), {commit: false}); toast("ดิจิคอม — กล้อง CCD ยุค 2000 แฟลชจัด วันที่สีส้ม", 1600); }
   camState.mode = mode;
-  if (mode === "pro") openProSheet();
-  if (mode === "roll") toast(`ROLL — ถ่ายได้ ${prefs.rollSize} รูป ยังไม่เห็นภาพจนกว่าจะล้างฟิล์ม 🎞`, 2200);
-  applyLivePreview(); renderCamLooks(); updateHud(); refreshRollChip();
-};
+  if (mode === "roll") toast(`ม้วนฟิล์ม — ถ่ายได้ ${prefs.rollSize} รูป ยังไม่เห็นภาพจนกว่าจะล้างฟิล์ม 🎞`, 2000);
+  if (mode === "pro") toast("โปร — ปรับ ISO · Shutter · Focus · WB · EV ที่แถบด้านล่าง", 1600);
+  if (mode !== "pro" && ["iso", "sh", "focus"].includes(ruler.k) && camState.tray === "ruler") setTray("none");
+  applyLivePreview(); renderCamLooks(); renderQbar(); updateHud(); refreshRollChip();
+}
+$("#cam-modes").onclick = e => { const b = e.target.closest("[data-mode]"); if (b) setMode(b.dataset.mode); };
 $("#roll-chip").onclick = openRoll;
 $("#nocam-retry").onclick = () => startCamera();
 $("#nocam-album").onclick = () => $("#f-one").click();
-// tap to focus / pinch zoom
+// viewfinder gestures: pinch = zoom · tap = focus/exposure point · drag up/down = EV · swipe left/right = mode · long-press = AE/AF lock · double-tap = flip
 (() => {
-  const vf = $("#vf"); let pinch = null;
-  vf.addEventListener("click", async e => {
-    if (e.target.closest("button") || !CAM.cam.track) return;
-    const r = vf.getBoundingClientRect(), x = (e.clientX - r.left) / r.width, y = (e.clientY - r.top) / r.height, f = $("#vf-focus");
-    f.style.left = e.clientX - r.left + "px"; f.style.top = e.clientY - r.top + "px"; f.classList.add("show"); setTimeout(() => f.classList.remove("show"), 900);
-    try { await CAM.cam.track.applyConstraints({advanced: [{pointsOfInterest: [{x, y}], focusMode: "single-shot", exposureMode: "continuous"}]}); } catch (err) {}
+  const vf = $("#vf"), pts = new Map(); let g = null, lastTap = 0, lpT = null;
+  const showFocus = (cx, cy) => { const f = $("#vf-focus"); f.style.left = cx + "px"; f.style.top = cy + "px"; f.classList.remove("show"); void f.offsetWidth; f.classList.add("show"); clearTimeout(showFocus.t); showFocus.t = setTimeout(() => f.classList.remove("show"), 1600); };
+  const sun = () => { $("#vf-sun").textContent = camState.ev ? "☀ " + fmtEV(camState.ev) : "☀"; };
+  vf.addEventListener("pointerdown", e => {
+    if (e.target.closest("button")) return;
+    vf.setPointerCapture(e.pointerId); pts.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    if (pts.size === 2) { clearTimeout(lpT); const [a, b] = [...pts.values()]; g = {pinch: true, d: Math.hypot(a.x - b.x, a.y - b.y), z: camState.zoom}; return; }
+    if (pts.size === 1) {
+      g = {x: e.clientX, y: e.clientY, t: Date.now(), ev: camState.ev, kind: null};
+      lpT = setTimeout(() => { if (g && !g.kind) { g.kind = "lock"; const r = vf.getBoundingClientRect(); showFocus(g.x - r.left, g.y - r.top); focusAt((g.x - r.left) / r.width, (g.y - r.top) / r.height, true); haptic(30); } }, 650);
+    }
   });
-  vf.addEventListener("touchmove", e => {
-    if (e.touches.length !== 2) return; const z = CAM.manualCaps().zoom; if (!z) return;
-    const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
-    if (!pinch) pinch = {d, z: CAM.cam.manual.zoom || 1}; else CAM.setZoom(Math.min(z.max, Math.max(z.min, pinch.z * d / pinch.d)));
-  }, {passive: true});
-  vf.addEventListener("touchend", () => { pinch = null; renderLensRow(); });
+  vf.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId) || !g) return; pts.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    if (g.pinch && pts.size >= 2) { const [a, b] = [...pts.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); setZoomLevel(g.z * Math.pow(d / g.d, 1.15)); return; }
+    if (g.pinch) return;
+    const dx = e.clientX - g.x, dy = e.clientY - g.y;
+    if (!g.kind && Math.hypot(dx, dy) > 14) { clearTimeout(lpT); g.kind = Math.abs(dx) > Math.abs(dy) * 1.3 ? "swipe" : "ev"; if (g.kind === "ev") { const r = vf.getBoundingClientRect(); const f = $("#vf-focus"); if (!f.classList.contains("show")) showFocus(r.width / 2, r.height / 2); } }
+    if (g.kind === "ev") {
+      const mc = CAM.manualCaps(), r = mc.ev || {min: -3, max: 3, step: .1}, st = r.step || .1;
+      let v = Math.round((g.ev - dy / 120) / st) * st; v = +Math.max(r.min, Math.min(r.max, v)).toFixed(2);
+      if (v !== camState.ev) { camState.ev = v; if (mc.ev) hwEV(v); applyLivePreview(); sun(); renderQbarSoon(); updateHud(); if (ruler.k === "ev" && camState.tray === "ruler") { ruler.p = r2p(ruler.o, v); drawRuler(); } }
+      const f = $("#vf-focus"); f.classList.add("show"); clearTimeout(showFocus.t); showFocus.t = setTimeout(() => f.classList.remove("show"), 1600);
+    }
+  });
+  const up = e => {
+    if (!pts.has(e.pointerId)) return; pts.delete(e.pointerId); clearTimeout(lpT);
+    if (!g) return;
+    if (g.pinch) { if (!pts.size) { g = null; renderZoom(); } return; }
+    const dx = e.clientX - g.x, now = Date.now();
+    if (g.kind === "swipe" && Math.abs(dx) > 50) { const i = MODES.indexOf(camState.mode) + (dx < 0 ? 1 : -1); if (MODES[i]) setMode(MODES[i]); }
+    else if (!g.kind && now - g.t < 400) {
+      const r = vf.getBoundingClientRect(), cx = e.clientX - r.left, cy = e.clientY - r.top;
+      if (now - lastTap < 300) { lastTap = 0; $("#c-flip").click(); g = null; return; }
+      lastTap = now; $("#vf-lock").hidden = true; toggleQS(false);
+      showFocus(cx, cy); sun(); focusAt(cx / r.width, cy / r.height, false);
+      if (prefs.tapShoot) setTimeout(shoot, 250);
+    }
+    if (g.kind === "ev") savePrefs();
+    g = null;
+  };
+  vf.addEventListener("pointerup", up); vf.addEventListener("pointercancel", up);
 })();
+async function focusAt(x, y, lock) {
+  camState.focusAt = {x, y}; $("#vf-lock").hidden = !lock;
+  if (!CAM.cam.track) return;
+  // translate the on-screen point into the sensor frame (zoom/mirror aware)
+  const k = camState.digital * (lensOf().crop || 1), front = $("#vf").classList.contains("front");
+  let px = .5 + (x - .5) / k, py = .5 + (y - .5) / k; if (front) px = 1 - px;
+  try { await CAM.cam.track.applyConstraints({advanced: [{pointsOfInterest: [{x: px, y: py}], focusMode: lock ? "manual" : "single-shot", exposureMode: lock ? "manual" : "continuous"}]}); }
+  catch (err) { try { await CAM.cam.track.applyConstraints({advanced: [{pointsOfInterest: [{x: px, y: py}]}]}); } catch (e2) {} }
+  if (!lock) setTimeout(() => { CAM.cam.track && CAM.cam.track.applyConstraints({advanced: [{focusMode: "continuous"}]}).catch(() => {}); }, 2500);
+}
+document.addEventListener("keydown", e => { if ($("#v-cam").hidden || e.repeat) return; if (e.key === "AudioVolumeUp" || e.key === "AudioVolumeDown" || e.key === " " || e.key === "Enter") { if (e.target.closest && e.target.closest("input")) return; e.preventDefault(); shoot(); } });
 
 $("#e-back").onclick = () => show("#v-cam");
 $("#e-album").onclick = openAlbumSheet;
@@ -751,10 +975,43 @@ $("#e-redo").onclick = () => { if (!hist.r.length) return; hist.u.push(hist.last
 $("#e-save").onclick = async () => saveBlobs([{blob: await exportBlob(), name: fileName()}]);
 const cmp = $("#e-compare"); cmp.addEventListener("pointerdown", e => { e.preventDefault(); showOriginal = true; requestRender(); }); ["pointerup", "pointerleave", "pointercancel"].forEach(t => cmp.addEventListener(t, () => { if (showOriginal) { showOriginal = false; requestRender(); } }));
 $("#tabs").onclick = e => { const b = e.target.closest("[data-tab]"); if (!b) return; haptic(); tab = b.dataset.tab; document.querySelectorAll("#tabs button").forEach(x => x.classList.toggle("on", x === b)); renderPanel(); };
-// drag to move crop in Social
-(() => { const st = $("#stage"); let d = null; st.addEventListener("pointerdown", e => { if (tab !== "social" || S.social.aspect === null || S.social.bg !== 0) return; d = {x: e.clientX, y: e.clientY}; st.setPointerCapture(e.pointerId); });
-  st.addEventListener("pointermove", e => { if (!d) return; const r = st.getBoundingClientRect(); S.social.cx = Math.min(1, Math.max(0, S.social.cx - (e.clientX - d.x) / r.width * .8)); S.social.cy = Math.min(1, Math.max(0, S.social.cy - (e.clientY - d.y) / r.height * .8)); d = {x: e.clientX, y: e.clientY}; requestRender(); });
-  st.addEventListener("pointerup", () => { if (d) { d = null; commit(); } }); })();
+// editor stage: pinch to zoom, drag to pan, double-tap 1× ↔ 2.5× · in Social with a crop: drag moves the crop
+const vz = {s: 1, x: 0, y: 0};
+function viewZoom(s, x, y) {
+  const st = $("#stage"), W = st.clientWidth, H = st.clientHeight; s = Math.max(1, Math.min(8, s));
+  const mx = W * (s - 1) / 2, my = H * (s - 1) / 2; vz.s = s; vz.x = Math.max(-mx, Math.min(mx, x)); vz.y = Math.max(-my, Math.min(my, y));
+  if (s === 1) vz.x = vz.y = 0;
+  $("#view").style.transform = `translate(${vz.x}px,${vz.y}px) scale(${vz.s})`;
+  const z = $("#st-zoom"); z.hidden = s <= 1.01; z.textContent = Math.round(s * 100) + "%";
+}
+(() => {
+  const st = $("#stage"), pts = new Map(); let g = null, lastTap = 0;
+  const cropMode = () => tab === "social" && S.social.aspect !== null && S.social.bg === 0 && vz.s === 1;
+  st.addEventListener("pointerdown", e => {
+    st.setPointerCapture(e.pointerId); pts.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; const r = st.getBoundingClientRect(); g = {pinch: true, d: Math.hypot(a.x - b.x, a.y - b.y), s: vz.s, x: vz.x, y: vz.y, cx: (a.x + b.x) / 2 - r.left - r.width / 2, cy: (a.y + b.y) / 2 - r.top - r.height / 2}; return; }
+    g = {x: e.clientX, y: e.clientY, vx: vz.x, vy: vz.y, crop: cropMode(), moved: false, t: Date.now()};
+  });
+  st.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId) || !g) return; pts.set(e.pointerId, {x: e.clientX, y: e.clientY});
+    if (g.pinch) { if (pts.size < 2) return; const [a, b] = [...pts.values()], k = Math.hypot(a.x - b.x, a.y - b.y) / g.d, s = Math.max(1, Math.min(8, g.s * k)), f = s / g.s;
+      viewZoom(s, g.cx - (g.cx - g.x) * f, g.cy - (g.cy - g.y) * f); return; }
+    const dx = e.clientX - g.x, dy = e.clientY - g.y; if (Math.hypot(dx, dy) > 6) g.moved = true;
+    if (g.crop) { const r = st.getBoundingClientRect(); S.social.cx = Math.min(1, Math.max(0, S.social.cx - (e.clientX - g.x) / r.width * .8)); S.social.cy = Math.min(1, Math.max(0, S.social.cy - (e.clientY - g.y) / r.height * .8)); g.x = e.clientX; g.y = e.clientY; requestRender(); return; }
+    if (vz.s > 1) viewZoom(vz.s, g.vx + dx, g.vy + dy);
+  });
+  const up = e => {
+    if (!pts.has(e.pointerId)) return; pts.delete(e.pointerId); if (!g) return;
+    if (g.pinch) { if (!pts.size) g = null; return; }
+    if (g.crop && g.moved) commit();
+    if (!g.moved && Date.now() - g.t < 300) { const now = Date.now();
+      if (now - lastTap < 300) { lastTap = 0; const r = st.getBoundingClientRect(); if (vz.s > 1) viewZoom(1, 0, 0); else { const cx = e.clientX - r.left - r.width / 2, cy = e.clientY - r.top - r.height / 2; viewZoom(2.5, -cx * 1.5, -cy * 1.5); } }
+      else lastTap = now; }
+    g = null;
+  };
+  st.addEventListener("pointerup", up); st.addEventListener("pointercancel", up);
+  st.addEventListener("wheel", e => { e.preventDefault(); viewZoom(vz.s * (e.deltaY < 0 ? 1.15 : 1 / 1.15), vz.x, vz.y); }, {passive: false});
+})();
 $("#d-back").onclick = () => { dump.items = []; show("#v-cam"); };
 $("#d-add").onclick = () => $("#f-many").click();
 $("#r-back").onclick = () => show("#v-cam");
@@ -781,7 +1038,7 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) { CAM
 
 // ================================================================== boot
 (async () => {
-  if (bridge) $("#edition").textContent = "FILM · PRO · APP " + VERSION;
+  showAlbumThumb(LS.get("thumb", null)); setTray(camState.tray === "ruler" ? "looks" : camState.tray); if (prefs.level) level(true);
   device = await detectDevice().catch(() => device);
   const l = allLooks().find(x => x.id === prefs.lastLook) || PRESETS.find(x => x.id === "teal_orange"); applyLook(l, {commit: false});
   const takeHash = () => { if (location.hash.startsWith("#look=")) { try { const imp = importLookCode(location.hash.slice(6)); setTimeout(() => toast(`ได้รับ Look "${imp.name}" แล้ว ✨ อยู่ใน My Looks`), 600); applyLivePreview(); renderCamLooks(); if (!$("#v-edit").hidden) { renderPanel(); requestRender(); } } catch (e) { toast("ลิงก์ Look ไม่ถูกต้อง"); } history.replaceState(null, "", location.pathname); } };

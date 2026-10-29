@@ -15,7 +15,7 @@
 <meta name="apple-mobile-web-app-title" content="MoonCam">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Noto+Sans+Thai:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="css/app.css?v=4">
+<link rel="stylesheet" href="css/app.css?v=5">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -59,10 +59,12 @@
     <video id="video" playsinline muted autoplay></video>
     <div class="vig" id="vf-vig"></div>
     <div class="scan" id="vf-scan" hidden></div>
-    <div class="frame" id="vf-frame"></div>
     <div class="grid" id="vf-grid"></div>
     <div class="center" id="vf-center" hidden></div>
-    <div class="focus" id="vf-focus"></div>
+    <div class="level" id="vf-level" hidden><i></i><b class="num"></b></div>
+    <div class="focus" id="vf-focus"><span class="sun num" id="vf-sun"></span></div>
+    <div class="lock" id="vf-lock" hidden>AE/AF LOCK</div>
+    <div class="zoomtag num" id="vf-zoom" hidden></div>
     <div class="flash" id="vf-flash"></div>
     <div class="count" id="vf-count" hidden></div>
     <div class="nocam" id="vf-nocam" hidden>
@@ -75,33 +77,40 @@
     </div>
   </div>
   <div class="cam-top">
-    <div class="brand"><svg class="i moon"><use href="#i-moon"/></svg><div><b>MOONCAM</b><small id="edition">FILM · PRO · v4</small></div></div>
+    <button class="ib" id="c-qs" aria-label="ตั้งค่าด่วน"><svg class="i"><use href="#i-pro"/></svg></button>
     <button class="ib" id="c-flash" aria-label="แฟลช/ไฟฉาย"><svg class="i"><use href="#i-flash"/></svg></button>
-    <button class="ib" id="c-timer" aria-label="ตั้งเวลา"><svg class="i"><use href="#i-timer"/></svg></button>
-    <button class="ib" id="c-ratio" aria-label="สัดส่วนภาพ"><svg class="i"><use href="#i-ratio"/></svg></button>
-    <button class="ib on" id="c-grid" aria-label="เส้นตาราง 9 ช่อง"><svg class="i"><use href="#i-grid"/></svg></button>
-    <button class="ib" id="c-center" aria-label="จุดกึ่งกลาง"><svg class="i"><use href="#i-center"/></svg></button>
+    <button class="ib txt num" id="c-ratio" aria-label="สัดส่วนภาพ">3:4</button>
+    <button class="ib" id="c-timer" aria-label="ตั้งเวลา"><svg class="i"><use href="#i-timer"/></svg><em class="num" id="c-timer-n"></em></button>
+    <button class="ib" id="c-grid" aria-label="เส้นตาราง"><svg class="i"><use href="#i-grid"/></svg></button>
     <button class="ib" id="c-settings" aria-label="ตั้งค่า"><svg class="i"><use href="#i-gear"/></svg></button>
   </div>
+  <div class="qs" id="qs" hidden></div>
   <div class="cam-hud" id="cam-hud"></div>
+  <canvas class="histo" id="histo" width="128" height="48" hidden></canvas>
   <button class="pill glass roll-chip" id="roll-chip" hidden></button>
-  <div class="cam-bottom">
-    <div class="lens-row" id="lens-row"></div>
-    <div class="strength" id="cam-strength" hidden><label>ความแรง</label><input type="range" id="cam-str" min="0" max="150" value="100"><output class="num" id="cam-str-o">100%</output></div>
-    <div class="look-strip" id="cam-looks"></div>
+  <div class="cam-bottom" id="cam-bottom">
+    <div class="zoom-row">
+      <div class="zoom-pill" id="zoom-pill"></div>
+      <button class="wand" id="c-looks" aria-label="ฟิลเตอร์"><svg class="i"><use href="#i-looks"/></svg></button>
+    </div>
+    <div class="tray">
+      <div class="look-strip" id="cam-looks"></div>
+      <div class="ruler-wrap" id="ruler" hidden>
+        <div class="ruler-head"><b id="ruler-name"></b><output class="num" id="ruler-val"></output><button class="chip" id="ruler-auto">AUTO</button></div>
+        <div class="ruler" id="ruler-track"><div class="ticks" id="ruler-ticks"></div><i class="needle"></i></div>
+      </div>
+    </div>
+    <div class="qbar" id="qbar"></div>
     <div class="modes" id="cam-modes">
-      <button data-mode="roll">ROLL</button>
-      <button data-mode="photo" class="on">PHOTO</button>
-      <button data-mode="pro">PRO</button>
-      <button data-mode="digicam">DIGICAM</button>
+      <button data-mode="roll">ม้วนฟิล์ม</button>
+      <button data-mode="digicam">ดิจิคอม</button>
+      <button data-mode="photo" class="on">ภาพถ่าย</button>
+      <button data-mode="pro">โปร</button>
     </div>
     <div class="shutter-row">
       <button class="album" id="c-album" aria-label="อัลบั้ม"><svg class="i"><use href="#i-album"/></svg></button>
       <button class="shutter" id="shutter" aria-label="ถ่ายรูป"><i></i></button>
-      <div class="flip" style="display:flex;gap:8px">
-        <button class="ib glass" id="c-lenses" aria-label="เลนส์และกล้องจำลอง"><svg class="i"><use href="#i-lens"/></svg></button>
-        <button class="ib glass" id="c-flip" aria-label="สลับกล้องหน้า/หลัง"><svg class="i"><use href="#i-flip"/></svg></button>
-      </div>
+      <button class="ib flipb" id="c-flip" aria-label="สลับกล้องหน้า/หลัง"><svg class="i"><use href="#i-flip"/></svg></button>
     </div>
   </div>
 </section>
@@ -111,7 +120,7 @@
   <div class="ed-top">
     <button class="ib" id="e-back" aria-label="กลับไปกล้อง"><svg class="i"><use href="#i-back"/></svg></button>
     <button class="ib" id="e-album" aria-label="อัลบั้ม"><svg class="i"><use href="#i-album"/></svg></button>
-    <span class="grow"></span>
+    <span class="grow ed-title">แต่งรูป</span>
     <button class="ib" id="e-undo" aria-label="ย้อนกลับ" disabled><svg class="i"><use href="#i-undo"/></svg></button>
     <button class="ib" id="e-redo" aria-label="ทำซ้ำ" disabled><svg class="i"><use href="#i-redo"/></svg></button>
     <button class="ib" id="e-compare" aria-label="กดค้างดูต้นฉบับ"><svg class="i"><use href="#i-compare"/></svg></button>
@@ -120,6 +129,7 @@
   <div class="stage" id="stage">
     <canvas id="view"></canvas>
     <span class="st-tag tag" id="st-tag">MOONCAM</span>
+    <span class="st-zoom num" id="st-zoom" hidden></span>
     <div class="busy" id="busy" hidden>กำลังเรนเดอร์…</div>
   </div>
   <div class="side">
@@ -187,6 +197,6 @@
 
 <script src="vendor/piexif.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script type="module" src="js/app.js?v=4"></script>
+<script type="module" src="js/app.js?v=5"></script>
 </body>
 </html>
