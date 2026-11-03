@@ -14,8 +14,8 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="MoonCam">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Noto+Sans+Thai:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="css/app.css?v=5">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Noto+Sans+Thai:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&family=Itim&family=Oswald:wght@500;700&family=Quicksand:wght@600;700&display=swap">
+<link rel="stylesheet" href="css/app.css?v=6">
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
@@ -55,6 +55,7 @@
 
 <!-- ================= CAMERA ================= -->
 <section class="view" id="v-cam">
+  <div class="skin" id="skin" hidden></div>
   <div class="vf" id="vf">
     <video id="video" playsinline muted autoplay></video>
     <div class="vig" id="vf-vig"></div>
@@ -80,6 +81,7 @@
     <button class="ib" id="c-qs" aria-label="ตั้งค่าด่วน"><svg class="i"><use href="#i-pro"/></svg></button>
     <button class="ib" id="c-flash" aria-label="แฟลช/ไฟฉาย"><svg class="i"><use href="#i-flash"/></svg></button>
     <button class="ib txt num" id="c-ratio" aria-label="สัดส่วนภาพ">3:4</button>
+    <button class="skin-chip" id="c-skin" hidden></button>
     <button class="ib" id="c-timer" aria-label="ตั้งเวลา"><svg class="i"><use href="#i-timer"/></svg><em class="num" id="c-timer-n"></em></button>
     <button class="ib" id="c-grid" aria-label="เส้นตาราง"><svg class="i"><use href="#i-grid"/></svg></button>
     <button class="ib" id="c-settings" aria-label="ตั้งค่า"><svg class="i"><use href="#i-gear"/></svg></button>
@@ -88,6 +90,7 @@
   <div class="cam-hud" id="cam-hud"></div>
   <canvas class="histo" id="histo" width="128" height="48" hidden></canvas>
   <button class="pill glass roll-chip" id="roll-chip" hidden></button>
+  <div class="skin-ctl" id="skin-ctl"></div>
   <div class="cam-bottom" id="cam-bottom">
     <div class="zoom-row">
       <div class="zoom-pill" id="zoom-pill"></div>
@@ -103,6 +106,7 @@
     <div class="qbar" id="qbar"></div>
     <div class="modes" id="cam-modes">
       <button data-mode="roll">ม้วนฟิล์ม</button>
+      <button data-mode="instant">โพลารอยด์</button>
       <button data-mode="digicam">ดิจิคอม</button>
       <button data-mode="photo" class="on">ภาพถ่าย</button>
       <button data-mode="pro">โปร</button>
@@ -170,6 +174,41 @@
   <div class="panel" id="r-panel"></div>
 </section>
 
+<!-- ================= INSTANT WALL ================= -->
+<section class="view" id="v-wall" hidden>
+  <div class="ed-top">
+    <button class="ib" id="w-back" aria-label="กลับ"><svg class="i"><use href="#i-back"/></svg></button>
+    <div class="brand" style="margin-left:4px"><div><b style="font-size:16px">INSTANT WALL</b><small id="w-count"></small></div></div>
+    <span class="grow"></span>
+  </div>
+  <div class="wall" id="w-grid"></div>
+</section>
+
+<!-- instant print: eject + develop -->
+<div class="iov" id="iov" hidden>
+  <div class="iov-top"><span class="iov-title" id="iov-title">DEVELOPING</span><button class="btn-ghost" id="iov-skip">ข้ามการรอ</button></div>
+  <div class="iov-clip" id="iov-clip"><div class="card" id="iov-card"><div class="card-photo" id="iov-photo"><canvas id="iov-canvas"></canvas><i class="dev-veil" id="iov-veil"></i></div><div class="card-cap" id="iov-cap"><span id="iov-capt"></span><em id="iov-date"></em></div></div></div>
+  <div class="iov-dev" id="iov-dev">
+    <div class="iov-prog"><span id="iov-msg">รูปกำลังค่อย ๆ แห้ง…</span><b class="num" id="iov-pct">0%</b></div>
+    <div class="bar"><i id="iov-bar"></i></div>
+    <div class="iov-tips"><div><b>เขย่ามือถือ</b><small>ช่วยให้แห้งเร็วขึ้น</small></div><div><b>ถูรูปไปมา</b><small>ใช้นิ้วถูบนรูป</small></div></div>
+  </div>
+  <div class="iov-done" id="iov-done" hidden>
+    <div class="tools" id="iov-tools"></div>
+    <div class="chips" id="iov-frames"></div>
+    <div class="chips" id="iov-fmt"></div>
+    <div class="iov-btns"><button class="big ghost" id="iov-again">ถ่ายต่อ</button><button class="big gold" id="iov-save">บันทึกลงเครื่อง</button></div>
+  </div>
+</div>
+
+<!-- full roll: darkroom -->
+<div class="darkroom" id="darkroom" hidden>
+  <div class="dr-top"><span>DARKROOM</span><i class="safelight"></i></div>
+  <div class="dr-head"><div class="can" id="dr-can"></div><div><b id="dr-title">ครบม้วนแล้ว!</b><small id="dr-msg">กรอฟิล์มกลับ… กำลังล้างภาพในห้องมืด</small><div class="bar"><i id="dr-bar"></i></div></div></div>
+  <div class="contact" id="dr-sheet"><div class="ch"><span id="dr-film"></span><span id="dr-date"></span></div><div class="cg" id="dr-grid"></div></div>
+  <div class="dr-btns" id="dr-btns" hidden><button class="big gold" id="dr-view">ดูรูปทั้งม้วน · บันทึก · แชร์</button><button class="big ghost" id="dr-new">ใส่ฟิล์มม้วนใหม่</button></div>
+</div>
+
 <div class="scrim" id="scrim"></div>
 <div class="sheet" id="sheet"><div class="grab"></div><h3><span id="sheet-title"></span><button class="ib" id="sheet-close" aria-label="ปิด" style="width:32px;height:32px"><svg class="i"><use href="#i-close"/></svg></button></h3><div class="body" id="sheet-body"></div></div>
 
@@ -197,6 +236,6 @@
 
 <script src="vendor/piexif.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script type="module" src="js/app.js?v=5"></script>
+<script type="module" src="js/app.js?v=6"></script>
 </body>
 </html>

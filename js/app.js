@@ -7,9 +7,10 @@ import * as SO from "./social.js";
 import * as EX from "./exif.js";
 import * as CAM from "./camera.js";
 import {detectDevice} from "./device.js";
+import * as AN from "./analog.js";
 import * as DB from "./store.js";
 
-const VERSION = "v5";
+const VERSION = "v6";
 const APP_URL = "https://mengnattawitmarin.github.io/moodcam/";
 const $ = q => document.querySelector(q);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
@@ -23,7 +24,7 @@ const haptic = (ms = 8) => { try { navigator.vibrate && navigator.vibrate(ms); }
 let toastT; function toast(m, ms = 2600) { let t = $(".toast"); if (!t) { t = el("div", "toast"); t.setAttribute("role", "status"); document.body.appendChild(t); } t.textContent = m; t.hidden = false; t.style.animation = "none"; void t.offsetWidth; t.style.animation = ""; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, ms); }
 
 // ------------------------------------------------------------------ preferences & state
-const prefs = Object.assign({grid: true, center: false, gps: false, stripGpsOnShare: false, keepExif: true, quality: .95, deviceProfile: true, rollSize: 24, ratio: "3:4", timer: 0, flash: "off", lastLook: "teal_orange", strength: 100, level: false, histo: false, sound: true, mirror: true, tapShoot: false, tray: "looks", editAfter: false}, LS.get("prefs", {}));
+const prefs = Object.assign({grid: true, center: false, gps: false, stripGpsOnShare: false, keepExif: true, quality: .95, deviceProfile: true, rollSize: 24, ratio: "3:4", timer: 0, flash: "off", lastLook: "teal_orange", strength: 100, level: false, histo: false, sound: true, mirror: true, tapShoot: false, tray: "looks", editAfter: false, instantModel: "classic", instantFrame: 0, instantFmt: "card", pack: 10, film: "sunny_gold", advanced: true}, LS.get("prefs", {}));
 const savePrefs = () => LS.set("prefs", prefs);
 let mine = LS.get("looks", []).map(l => Object.assign(l, {adj: E.A(l.adj)}));
 const saveMine = () => LS.set("looks", mine);
@@ -107,14 +108,14 @@ function renderPipeline(base, useMemo) {
 const finalCompose = (img, maxLong) => SO.compose(img, S.social, maxLong, bodyOf(), session.when);
 
 // ------------------------------------------------------------------ views
-const views = ["#v-cam", "#v-edit", "#v-dump", "#v-roll"];
+const views = ["#v-cam", "#v-edit", "#v-dump", "#v-roll", "#v-wall"];
 function show(v) { views.forEach(q => $(q).hidden = q !== v); if (v === "#v-cam") { startCamera(); if (prefs.level) level(true); } else { CAM.stop(); histo(false); level(false); toggleQS(false); } }
 
 // ================================================================== CAMERA
 const RATIOS = {"3:4": 3 / 4, "9:16": 9 / 16, "1:1": 1, "4:5": 4 / 5, "full": 0};
 const camState = {mode: "photo", prevBody: null, prevLook: null, lastPos: null, watch: null, starting: false, thumbSrc: null,
   ev: 0, wb: 0, zoom: 1, digital: 1, ultra: false, focusAt: {x: .5, y: .5}, tray: prefs.tray || "looks"};
-const ratioVal = () => prefs.ratio === "full" ? ($("#v-cam").clientWidth || innerWidth) / ($("#v-cam").clientHeight || innerHeight) : RATIOS[prefs.ratio] || 3 / 4;
+const ratioVal = () => camState.mode === "instant" ? AN.instantOf(prefs.instantModel).ratio : camState.mode === "roll" ? 2 / 3 : prefs.ratio === "full" ? ($("#v-cam").clientWidth || innerWidth) / ($("#v-cam").clientHeight || innerHeight) : RATIOS[prefs.ratio] || 3 / 4;
 // camera-only software corrections (used when the phone does not expose real EV / white balance)
 function camSoft() {
   const mc = CAM.manualCaps(), o = {exposure: 0, temp: 0};
@@ -149,6 +150,7 @@ function noCam(msg) { $("#vf-nocam").hidden = false; $("#nocam-msg").textContent
 
 // ---------------------------------------------------------------- layout: preview box sized to the ratio (WYSIWYG with the crop)
 function layoutCam() {
+  if (skinOn()) return layoutSkin();
   const root = $("#v-cam"), vw = root.clientWidth || innerWidth, vh = root.clientHeight || innerHeight, TOP = 56, BOT = 214, r = ratioVal();
   const avail = vh - TOP - BOT;
   let w, h, top;
@@ -397,7 +399,9 @@ function watchGps(on) {
 }
 
 async function shoot() {
-  if (!CAM.cam.stream || shoot.busy) return;
+  if (!CAM.cam.stream || shoot.busy || !$("#iov").hidden || !$("#darkroom").hidden) return;
+  if (camState.mode === "roll" && !prefs.advanced) { haptic(40); toast("ขึ้นฟิล์มก่อน — ปัดหรือแตะคันโยกขึ้นฟิล์ม", 1400); const lv = $("#sk-lever"); if (lv) { lv.classList.remove("nudge"); void lv.offsetWidth; lv.classList.add("nudge"); } return; }
+  if (camState.mode === "instant" && prefs.pack <= 0) return openPackSheet();
   shoot.busy = true; haptic(15);
   try {
     if (prefs.timer) { const c = $("#vf-count"); c.hidden = false; for (let i = prefs.timer; i > 0; i--) { c.textContent = i; await new Promise(r => setTimeout(r, 1000)); } c.hidden = true; }
@@ -410,14 +414,18 @@ async function shoot() {
     const untouched = blob && shot === canvas;
     const when = new Date(), gps = prefs.gps ? camState.lastPos : null;
     S.cam = camSoft();
-    setAlbumThumb(shot);
     if (camState.mode === "roll") {
       const jpeg = untouched ? blob : await new Promise(r => shot.toBlob(r, "image/jpeg", .95));
-      await DB.rollAdd({id: Date.now() + "_" + Math.random().toString(36).slice(2, 6), time: when.getTime(), blob: jpeg, gps, settings: JSON.parse(snap()), developed: false});
-      await refreshRollChip(); toast("เก็บลงม้วนฟิล์มแล้ว 🎞 ยังไม่เห็นภาพจนกว่าจะล้างฟิล์ม", 1800);
+      const st = JSON.parse(snap()); st.film = prefs.film;
+      await DB.rollAdd({id: Date.now() + "_" + Math.random().toString(36).slice(2, 6), time: when.getTime(), blob: jpeg, gps, settings: st, developed: false, film: prefs.film});
+      prefs.advanced = false; savePrefs();
+      const {un} = await refreshRollChip(); renderSkin();
+      if (un >= prefs.rollSize) setTimeout(showDarkroom, 600);
       return;
     }
     const exif = untouched ? await EX.readExif(blob) : null;
+    if (camState.mode === "instant") { prefs.pack = Math.max(0, prefs.pack - 1); savePrefs(); renderSkin(); startInstant(shot, {blob: untouched ? blob : null, exif, gps, when}, snap()); return; }
+    setAlbumThumb(shot);
     const meta = {blob: untouched ? blob : null, exif, gps, when, fromCamera: true, name: "MoonCam"};
     if (prefs.editAfter) await openEditor(shot, meta);
     else instantSave(shot, meta, snap());
@@ -446,6 +454,300 @@ async function editLast() {
   Object.assign(S, JSON.parse(L.settings)); await openEditor(L.shot, L.meta);
 }
 window.__mcShutter = () => { if (!$("#v-cam").hidden) shoot(); };
+
+// ================================================================== ANALOG MODES (instant camera · film roll)
+const skinOn = () => camState.mode === "instant" || camState.mode === "roll";
+function applySkinLook() {
+  if (camState.mode === "instant") { const m = AN.instantOf(prefs.instantModel); applyLook({id: "instant_" + m.id, name: m.name, adj: m.adj}, {commit: false}); }
+  if (camState.mode === "roll") { const f = AN.filmOf(prefs.film); applyLook({id: "film_" + f.id, name: f.name, adj: f.adj}, {commit: false}); }
+  S.strength = 100;
+}
+function setSkin() {
+  const root = $("#v-cam"), on = skinOn();
+  root.classList.toggle("skin-on", on); root.classList.toggle("skin-instant", camState.mode === "instant"); root.classList.toggle("skin-roll", camState.mode === "roll");
+  $("#skin").hidden = !on; $("#c-skin").hidden = !on; if (!on) $("#skin-ctl").innerHTML = "";
+  if (!on) { ["--sk-bg", "--sk-btn", "--sk-ring", "--sk-accent"].forEach(k => root.style.removeProperty(k)); $("#vf").style.borderRadius = ""; return; }
+  const v = camState.mode === "instant" ? AN.instantOf(prefs.instantModel).skin : AN.filmOf(prefs.film);
+  root.style.setProperty("--sk-bg", v.bg); root.style.setProperty("--sk-btn", v.btn);
+  root.style.setProperty("--sk-ring", camState.mode === "instant" ? v.btnRing : v.body === "black" ? "conic-gradient(from 200deg,#4a4d52,#15161a,#4a4d52,#2b2e33,#4a4d52)" : "conic-gradient(from 200deg,#e9e9e6,#8e8f8b,#e9e9e6,#b9bab6,#e9e9e6)");
+  root.style.setProperty("--sk-accent", camState.mode === "instant" ? v.accent : v.accent2);
+  renderSkinChip();
+}
+function renderSkinChip() {
+  const c = $("#c-skin");
+  if (camState.mode === "instant") { const m = AN.instantOf(prefs.instantModel); c.innerHTML = `${m.name}<svg class="i" style="width:14px;height:14px"><path d="m6 9 6 6 6-6"/></svg>`; }
+  else { const f = AN.filmOf(prefs.film); c.innerHTML = `<span class="fbox" style="background:${f.box}"></span>${f.name} · ${prefs.rollSize}`; }
+}
+let skinGeo = null;
+function layoutSkin() {
+  const root = $("#v-cam"), vw = root.clientWidth || innerWidth, vh = root.clientHeight || innerHeight, TOP = 60, BOT = 152;
+  const bw = Math.min(vw - 28, 400), bx = (vw - bw) / 2, by = TOP + 4, bh = Math.max(300, vh - TOP - BOT - 10);
+  const g = {vw, vh, bx, by, bw, bh};
+  if (camState.mode === "instant") {
+    const m = AN.instantOf(prefs.instantModel), maxW = bw - 64, maxH = bh * .56;
+    g.ww = Math.min(maxW, maxH * m.ratio); g.wh = g.ww / m.ratio; g.wx = (vw - g.ww) / 2; g.wy = by + 24;
+    g.slotY = by + bh - 30;
+    const free = g.slotY - (g.wy + g.wh) - 34; g.lens = Math.max(64, Math.min(150, free - 10)); g.lensY = g.wy + g.wh + 16 + Math.max(0, (free - g.lens) / 2);
+  } else {
+    g.plateH = Math.max(108, Math.min(150, bh * .27)); g.stripY = by + bh - 62;
+    const top = by + g.plateH + 16, maxH = g.stripY - 14 - top;
+    g.wh = Math.min(maxH, (bw - 80) * 1.5); g.ww = g.wh / 1.5; g.wx = (vw - g.ww) / 2; g.wy = top + (maxH - g.wh) / 2;
+  }
+  skinGeo = g;
+  Object.assign($("#vf").style, {width: g.ww + "px", height: g.wh + "px", top: g.wy + "px", left: g.wx + "px", borderRadius: camState.mode === "instant" ? "10px" : "6px"});
+  root.classList.remove("over");
+  renderSkin();
+}
+function renderSkin() {
+  if (!skinOn() || !skinGeo) return;
+  const g = skinGeo, sk = $("#skin"), px = v => Math.round(v) + "px";
+  $("#skin-ctl").innerHTML = "";
+  if (camState.mode === "instant") {
+    const m = AN.instantOf(prefs.instantModel), k = m.skin, L = g.lens, side = Math.min(64, (g.bw - L) / 2 - 28);
+    sk.innerHTML = `<div class="ibody" style="left:${px(g.bx)};top:${px(g.by)};width:${px(g.bw)};height:${px(g.bh)};background:${k.body};border-radius:${k.radius}px;${k.trim ? `box-shadow:0 30px 60px rgba(0,0,0,.6),inset 0 0 0 5px ${k.trim}` : ""}"></div>
+      <div class="iwin" style="left:${px(g.wx - 10)};top:${px(g.wy - 10)};width:${px(g.ww + 20)};height:${px(g.wh + 20)}"></div>
+      <div class="iflash" style="left:${px(g.bx + 24)};top:${px(g.lensY + L / 2 - 20)};width:${px(side)};background:${k.flash}"></div>
+      <div class="ilens" style="left:${px(g.vw / 2 - L / 2)};top:${px(g.lensY)};width:${px(L)};height:${px(L)};background:radial-gradient(circle,#1d2433 0 22%,#0b0d12 23% 40%,#2a2a2e 41% 46%,#121214 47% 66%,${k.ring} 67% 70%,rgba(0,0,0,.55) 71% 100%)"></div>
+      <div class="ilcd num" style="left:${px(g.bx + g.bw - 24 - side)};top:${px(g.lensY + L / 2 - 20)};width:${px(side)};color:${k.lcd}">${prefs.pack}</div>
+      <div class="ilogo" style="top:${px(g.slotY - 26)};color:${k.logo}">${m.id === "mini" ? "mooncam mini" : "MOONCAM"}</div>
+      <div class="islot" style="left:${px(g.bx + 34)};top:${px(g.slotY)};width:${px(g.bw - 68)}"></div>`;
+  } else {
+    const f = AN.filmOf(prefs.film), black = f.body === "black", n = camState.rollCount || 0, tot = prefs.rollSize;
+    const plate = black ? "linear-gradient(180deg,#3a3d42 0%,#1d1f23 30%,#2b2e33 46%,#121315 47%,#191a1d 100%)" : "linear-gradient(180deg,#e9e9e6 0%,#b9bab6 30%,#d6d7d3 46%,#1c1b19 47%,#262421 100%)";
+    const cells = Array.from({length: tot}, (_, i) => `<i style="background:${i < n ? f.shot : i === n ? f.accent : "rgba(255,255,255,.08)"}${i === n ? `;box-shadow:0 0 6px ${f.accent}` : ""}"></i>`).join("");
+    const ph = g.plateH, lever = !prefs.advanced;
+    sk.innerHTML = `<div class="rplate" style="left:${px(g.bx + 6)};top:${px(g.by + 8)};width:${px(g.bw - 12)};height:${px(ph)};background:${plate}">
+        <span class="rknob" style="background:${black ? "linear-gradient(180deg,#3a3d42,#15161a)" : "linear-gradient(180deg,#d6d7d3,#8e8f8b)"}"></span>
+        <b class="rlogo" style="color:${black ? "#b8bcc2" : "#2b2a27"}">MOONCAM 35</b>
+        <span class="rcount" style="background:radial-gradient(circle,#111 0 60%,${black ? "#55585e" : "#9c9d99"} 61%)"><b style="color:${f.accent}">${Math.min(n + (prefs.advanced ? 1 : 0), tot) || 1}</b><small>/${tot}</small></span>
+        <span class="rtab" style="top:${px(ph * .52)}"><span class="fbox big" style="background:${f.box}"><em style="color:${f.boxInk}">${f.short[0]}<br>${f.short[1]}</em><strong style="color:${f.isoInk}">${f.iso}</strong></span><small>ฟิล์มในกล้อง<br><span style="color:${f.accent2}">${tot} EXP · ISO ${f.iso}</span></small></span>
+      </div>
+      <div class="rwin" style="left:${px(g.wx - 7)};top:${px(g.wy - 7)};width:${px(g.ww + 14)};height:${px(g.wh + 14)}"></div>
+      <div class="rstrip" style="left:${px(g.bx)};top:${px(g.stripY)};width:${px(g.bw)}"><div class="sp"></div><div class="cells" style="grid-template-columns:repeat(${tot},minmax(0,1fr))">${cells}</div><div class="sp"></div></div>
+      <div class="rnote" style="top:${px(g.stripY + 50)}">ถ่ายไป <b style="color:${f.accent}">${n}</b> จาก ${tot} · ${n >= tot ? "ครบแล้ว!" : "ดูรูปได้เมื่อถ่ายครบแล้วล้างฟิล์ม"}</div>`;
+    $("#skin-ctl").innerHTML = `<button class="rlever${lever ? " ready" : ""}" id="sk-lever" aria-label="ขึ้นฟิล์ม" style="--acc:${f.accent}"><i style="background:${black ? "linear-gradient(180deg,#4a4d52,#15161a)" : "linear-gradient(180deg,#e6e6e3,#8e8f8b)"}"></i><span>${lever ? "ขึ้นฟิล์ม ↑" : "พร้อมถ่าย"}</span></button>`;
+    const lv = $("#sk-lever"); let y0 = null;
+    lv.onpointerdown = e => { y0 = e.clientY; lv.setPointerCapture(e.pointerId); };
+    lv.onpointerup = e => { if (y0 == null) return; y0 = null; advanceFilm(); };
+  }
+}
+function advanceFilm() {
+  if (prefs.advanced) return; prefs.advanced = true; savePrefs(); haptic([12, 40, 12]);
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); const n = actx.sampleRate * .22, b = actx.createBuffer(1, n, actx.sampleRate), ch = b.getChannelData(0);
+    for (let i = 0; i < n; i++) { const t = i / n; ch[i] = (Math.random() * 2 - 1) * (Math.sin(t * 90) > .6 ? .9 : .15) * (1 - t); }
+    const s = actx.createBufferSource(), gn = actx.createGain(); gn.gain.value = .35; s.buffer = b; s.connect(gn).connect(actx.destination); s.start(); } catch (e) {}
+  renderSkin();
+}
+
+// ---------------------------------------------------------------- pickers
+function bodyMini(m) {
+  const k = m.skin, w = m.id === "wide" ? 132 : m.id === "mini" ? 80 : 104, h = m.id === "wide" ? 72 : m.id === "mini" ? 90 : 84;
+  return `<span class="mini-body" style="width:${w}px;height:${h}px;background:${k.body};border-radius:${Math.min(k.radius, 28) * .7}px;${k.trim ? `box-shadow:inset 0 0 0 4px ${k.trim},0 8px 16px rgba(0,0,0,.5)` : ""}">
+    <i class="mb-lens" style="background:radial-gradient(circle,#1d2433 0 25%,#0b0d12 26% 55%,${k.ring} 56% 62%,rgba(0,0,0,.5) 63%)"></i><i class="mb-flash" style="background:${k.flash}"></i><i class="mb-vf"></i></span>`;
+}
+function openModelSheet() {
+  const b = el("div"); b.appendChild(note("แต่ละรุ่นมีรูปร่าง ขนาดฟิล์ม และสีภาพไม่เหมือนกัน"));
+  const g = el("div", "pick-grid");
+  AN.INSTANT.forEach(m => { const c = el("button", "pick" + (m.id === prefs.instantModel ? " on" : ""), `<span class="pick-art">${bodyMini(m)}</span><b>${m.name}</b><em class="num" style="color:${m.skin.accent}">${m.format}</em><small>${m.desc}</small>`);
+    c.onclick = () => { haptic(); prefs.instantModel = m.id; prefs.instantFrame = 0; savePrefs(); applySkinLook(); setSkin(); applyLivePreview(); closeSheet(); toast(m.name + " — " + m.desc, 1600); }; g.appendChild(c); });
+  b.appendChild(g); openSheet("กล้องโพลารอยด์", b);
+}
+function openFilmSheet() {
+  const b = el("div"); b.appendChild(note("เลือกฟิล์มก่อนใส่กล้อง แต่ละยี่ห้อให้สีภาพต่างกัน — ชื่อฟิล์มเป็นของ MoonCam เอง"));
+  const g = el("div", "pick-grid");
+  AN.FILMS.forEach(f => { const c = el("button", "pick film" + (f.id === prefs.film ? " on" : ""), `<span class="fbox big wide" style="background:${f.box}"><em style="color:${f.boxInk}">${f.short[0]}<br>${f.short[1]}</em><strong style="color:${f.isoInk}">${f.iso}</strong></span><b>${f.name}</b><span class="sw3">${f.swatch.map(c => `<i style="background:${c}"></i>`).join("")}<small>${f.tone}</small></span>`);
+    if (f.id === prefs.film) c.style.borderColor = f.accent;
+    c.onclick = () => pickFilm(f); g.appendChild(c); });
+  b.appendChild(g);
+  b.appendChild(label("จำนวนรูปต่อม้วน"));
+  b.appendChild(chips([[24, "24 รูป"], [36, "36 รูป"]], prefs.rollSize, async k => { if ((camState.rollCount || 0) > 0 && k !== prefs.rollSize) return toast("เปลี่ยนจำนวนรูปได้ตอนใส่ม้วนใหม่", 1500); prefs.rollSize = k; savePrefs(); setSkin(); renderSkin(); openFilmSheet(); }));
+  openSheet("เลือกม้วนฟิล์ม", b);
+}
+function pickFilm(f) {
+  haptic();
+  const go = () => { prefs.film = f.id; prefs.advanced = true; savePrefs(); applySkinLook(); setSkin(); applyLivePreview(); renderSkin(); closeSheet(); toast(`ใส่ฟิล์ม ${f.name} แล้ว · ${f.tone}`, 1600); };
+  if (f.id === prefs.film) return closeSheet();
+  const n = camState.rollCount || 0; if (!n) return go();
+  const b = el("div"); b.appendChild(note(`ม้วน ${AN.filmOf(prefs.film).name} ถ่ายไปแล้ว ${n} รูป — เปลี่ยนฟิล์มตอนนี้ จะล้างม้วนเดิมก่อน (ได้รูป ${n} รูป)`));
+  b.appendChild(button("ล้างม้วนนี้ แล้วใส่ฟิล์มใหม่", "big gold", async () => { closeSheet(); await showDarkroom(); prefs.film = f.id; savePrefs(); applySkinLook(); setSkin(); applyLivePreview(); }));
+  b.appendChild(button("ยกเลิก", "big ghost", closeSheet));
+  openSheet("เปลี่ยนฟิล์ม", b);
+}
+function openPackSheet() {
+  const b = el("div"); b.appendChild(note("ฟิล์มในแพ็คหมดแล้ว 📷 ใส่แพ็คใหม่เพื่อถ่ายต่อ"));
+  b.appendChild(button("ใส่แพ็คใหม่ (10 แผ่น)", "big gold", () => { prefs.pack = 10; savePrefs(); renderSkin(); closeSheet(); haptic([10, 60, 10]); toast("ใส่แพ็คใหม่แล้ว · 10 แผ่น"); }));
+  openSheet("แพ็คฟิล์มหมด", b);
+}
+$("#c-skin").onclick = () => camState.mode === "instant" ? openModelSheet() : openFilmSheet();
+
+// ---------------------------------------------------------------- instant print: eject → develop → done
+const IV = {photo: null, meta: null, settings: null, model: null, p: 0, raf: 0, boost: 0, done: false, saved: false, caption: "", date: true, frame: 0, fmt: "card"};
+async function renderWith(img, settings, max, meta = {}) {
+  const keepS = snap(), keepSession = {...session};
+  try {
+    Object.assign(S, JSON.parse(settings)); session.full = scaled(img, max); session.prev = null;
+    Object.assign(session, {faces: null, fromCamera: true, exif: meta.exif || null, gps: meta.gps || null, when: meta.when || new Date()}); memo.clear();
+    if (F.hasBeauty(S.beauty)) { try { session.faces = await F.detectFaces(scaled(session.full, device.preview)); } catch (e) {} }
+    return renderPipeline(session.full, false);
+  } finally { Object.assign(session, keepSession); Object.assign(S, JSON.parse(keepS)); memo.clear(); }
+}
+function motorSound(sec) {
+  if (!prefs.sound) return;
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); const o = actx.createOscillator(), g = actx.createGain(), f = actx.createBiquadFilter();
+    o.type = "sawtooth"; o.frequency.value = 74; f.type = "lowpass"; f.frequency.value = 900; g.gain.setValueAtTime(0, actx.currentTime); g.gain.linearRampToValueAtTime(.16, actx.currentTime + .08);
+    g.gain.setValueAtTime(.16, actx.currentTime + sec - .15); g.gain.linearRampToValueAtTime(0, actx.currentTime + sec);
+    o.frequency.linearRampToValueAtTime(92, actx.currentTime + sec); o.connect(f).connect(g).connect(actx.destination); o.start(); o.stop(actx.currentTime + sec + .05); } catch (e) {}
+}
+const fmtDate = d => `${d.getDate()}.${d.getMonth() + 1}.${String(d.getFullYear()).slice(2)}`;
+function sizeCard() {
+  const m = IV.model, b = m.border, vw = innerWidth, cw = Math.min(vw - 70, 330, (innerHeight - 330) * (1 + b[0] + b[2]) / (1 / m.ratio + b[1] + b[3]));
+  const pw = cw / (1 + b[0] + b[2]), ph = pw / m.ratio;
+  const card = $("#iov-card"); Object.assign(card.style, {width: cw + "px", padding: `${pw * b[1]}px ${pw * b[2]}px 0 ${pw * b[0]}px`, background: (m.frames[IV.frame] || m.frames[0])[1]});
+  Object.assign($("#iov-photo").style, {width: pw + "px", height: ph + "px"});
+  Object.assign($("#iov-cap").style, {height: pw * b[3] + "px", fontSize: Math.max(14, pw * b[3] * .3) + "px"});
+  const fc = (m.frames[IV.frame] || m.frames[0])[1], dark = parseInt(fc.slice(1, 3), 16) < 90;
+  $("#iov-cap").style.color = dark ? "#f2efe8" : m.ink;
+  return {cw, ch: ph + pw * (b[1] + b[3])};
+}
+async function startInstant(shot, meta, settings) {
+  const m = AN.instantOf(prefs.instantModel);
+  Object.assign(IV, {photo: null, shot: null, prevImg: null, meta, settings, model: m, p: 0, boost: 0, done: false, saved: false, caption: "", date: true, frame: prefs.instantFrame || 0, fmt: prefs.instantFmt || "card"});
+  const ov = $("#iov"); ov.hidden = false; ov.className = "iov eject"; $("#iov-done").hidden = true; $("#iov-title").textContent = "DEVELOPING"; $("#iov-skip").textContent = "ข้ามการรอ";
+  $("#iov-capt").textContent = ""; $("#iov-date").textContent = fmtDate(meta.when);
+  const {cw, ch} = sizeCard(), clip = $("#iov-clip"), card = $("#iov-card");
+  const slotY = skinGeo ? skinGeo.slotY + 4 + (parseFloat(getComputedStyle($("#v-cam")).top) || 0) : innerHeight * .6;
+  Object.assign(clip.style, {top: slotY + "px", height: ch + 30 + "px", width: cw + 40 + "px", marginLeft: -(cw + 40) / 2 + "px"});
+  card.style.transition = "none"; card.style.transform = `translateY(${-ch - 10}px)`;
+  const cv = $("#iov-canvas"); cv.width = 8; cv.height = 8; cv.getContext("2d").fillStyle = "#2c2d31"; cv.getContext("2d").fillRect(0, 0, 8, 8);
+  setVeil(0);
+  void card.offsetWidth; motorSound(2); haptic([30, 40, 30, 40, 30, 40, 30]);
+  card.style.transition = "transform 2s cubic-bezier(.35,.05,.4,1)"; card.style.transform = "translateY(0)";
+  await new Promise(r => setTimeout(r, 2150));
+  ov.className = "iov dev";
+  clip.style.transition = "top .7s var(--ease)"; clip.style.top = Math.max(70, (innerHeight - ch) / 2 - 90) + "px"; clip.style.overflow = "visible";
+  card.style.transition = "transform .7s var(--ease)"; card.style.transform = "rotate(1.5deg)";
+  await new Promise(r => setTimeout(r, 750));
+  // quick preview render (the print is still "undeveloped", so the short wait is invisible); full-res happens on save
+  try { const img = await renderWith(shot, settings, 900, meta); IV.prevImg = img; const r = $("#iov-photo").getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+    cv.width = Math.round(r.width * dpr) || 600; cv.height = Math.round(r.height * dpr) || 600; const x = cv.getContext("2d"), s = img.width / img.height, t = cv.width / cv.height;
+    let sw = img.width, sh = img.height; if (s > t) sw = sh * t; else sh = sw / t; x.drawImage(img, (img.width - sw) / 2, (img.height - sh) / 2, sw, sh, 0, 0, cv.width, cv.height); }
+  catch (e) { toast("เรนเดอร์ไม่สำเร็จ: " + e.message); }
+  IV.shot = shot;
+  let last = performance.now();
+  const DUR = 40000;
+  const tick = now => {
+    const dt = now - last; last = now;
+    IV.p = Math.min(1, IV.p + dt / DUR * (1 + IV.boost)); IV.boost *= .96;
+    setVeil(IV.p); $("#iov-pct").textContent = Math.round(IV.p * 100) + "%"; $("#iov-bar").style.width = IV.p * 100 + "%";
+    if (IV.p >= 1) return instantDone();
+    IV.raf = requestAnimationFrame(tick);
+  };
+  cancelAnimationFrame(IV.raf); IV.raf = requestAnimationFrame(tick);
+  window.addEventListener("devicemotion", onShakeDev);
+}
+function setVeil(p) {
+  const e = Math.pow(p, .8);
+  $("#iov-veil").style.opacity = (1 - e) * .97;
+  $("#iov-canvas").style.filter = `saturate(${(.15 + .85 * e).toFixed(3)}) contrast(${(.55 + .45 * e).toFixed(3)}) brightness(${(1.25 - .25 * e).toFixed(3)}) blur(${((1 - e) * 1.2).toFixed(2)}px)`;
+}
+let lastShake = 0;
+function onShakeDev(e) { const a = e.accelerationIncludingGravity || {}; const m = Math.hypot(a.x || 0, a.y || 0, a.z || 0); if (Math.abs(m - lastShake) > 9 && !IV.done) { IV.boost = Math.min(10, IV.boost + 2.5); haptic(6); } lastShake = m; }
+(() => { const card = $("#iov-card"); let pt = null;
+  card.addEventListener("pointermove", e => { if (IV.done || $("#iov").className.indexOf("dev") < 0) return; if (pt) { const d = Math.hypot(e.clientX - pt.x, e.clientY - pt.y); IV.p = Math.min(1, IV.p + d * .00035); } pt = {x: e.clientX, y: e.clientY}; });
+  card.addEventListener("pointerleave", () => pt = null); card.addEventListener("pointerup", () => pt = null);
+})();
+function instantDone() {
+  cancelAnimationFrame(IV.raf); window.removeEventListener("devicemotion", onShakeDev);
+  IV.done = true; IV.p = 1; setVeil(1); haptic([10, 30, 10]);
+  $("#iov").className = "iov done"; $("#iov-title").textContent = "พร้อมแล้ว ✦"; $("#iov-skip").textContent = "ทิ้งรูปนี้";
+  $("#iov-done").hidden = false; renderInstantTools();
+}
+function renderInstantTools() {
+  const m = IV.model, t = $("#iov-tools"); t.textContent = "";
+  const tool = (ic, l, fn, on) => { const b = el("button", "tool" + (on ? " on" : ""), `<i>${icon(ic)}</i>${l}`); b.onclick = () => { haptic(); fn(); }; t.appendChild(b); };
+  tool("adjust", "เขียนข้อความ", () => { const v = prompt("เขียนบนขอบรูป", IV.caption || ""); if (v !== null) { IV.caption = v.slice(0, 32); $("#iov-capt").textContent = IV.caption; IV.saved = false; syncSaveBtn(); } }, !!IV.caption);
+  tool("timer", IV.date ? "ซ่อนวันที่" : "ใส่วันที่", () => { IV.date = !IV.date; $("#iov-date").hidden = !IV.date; IV.saved = false; renderInstantTools(); });
+  tool("layers", "กำแพงรูป", () => { closeInstant(true).then(openWall); });
+  tool("share", "แชร์", async () => { const it = await instantExport(); shareBlobs([it]); });
+  const fr = $("#iov-frames"); fr.textContent = ""; fr.appendChild(chips(m.frames.map(([n], i) => [i, n]), IV.frame, k => { IV.frame = k; prefs.instantFrame = k; savePrefs(); sizeCard(); IV.saved = false; renderInstantTools(); }));
+  const fm = $("#iov-fmt"); fm.textContent = ""; fm.appendChild(chips([["card", "ทั้งใบมีขอบ"], ["photo", "เฉพาะรูป"], ["story", "สตอรี่ 9:16"]], IV.fmt, k => { IV.fmt = k; prefs.instantFmt = k; savePrefs(); IV.saved = false; renderInstantTools(); }));
+  syncSaveBtn();
+}
+function syncSaveBtn() { const b = $("#iov-save"); b.textContent = IV.saved ? "บันทึกแล้ว ✓" : "บันทึกลงเครื่อง"; b.classList.toggle("gold", !IV.saved); b.classList.toggle("ghost", IV.saved); }
+function cardCanvas(w = 1600) { return AN.makeCard(IV.photo, IV.model, {frame: IV.frame, caption: IV.caption, date: IV.date ? fmtDate(IV.meta.when) : "", w}); }
+async function fullPhoto() { if (!IV.photo) IV.photo = await renderWith(IV.shot, IV.settings, 2000, IV.meta); return IV.photo; }
+async function instantExport() {
+  await fullPhoto();
+  let c;
+  if (IV.fmt === "photo") c = IV.photo;
+  else if (IV.fmt === "story") {
+    const card = cardCanvas(860); c = newCanvas(1080, 1920); const x = c.getContext("2d");
+    x.filter = "blur(40px) brightness(.55)"; x.drawImage(IV.photo, -100, -100, 1280, 2120); x.filter = "none";
+    x.save(); x.translate(540, 900); x.rotate(-.035); x.shadowColor = "rgba(0,0,0,.55)"; x.shadowBlur = 50; x.shadowOffsetY = 24; x.drawImage(card, -card.width / 2, -card.height / 2); x.restore();
+    x.fillStyle = "rgba(255,255,255,.75)"; x.font = "600 30px 'Cormorant Garamond', serif"; x.textAlign = "center"; x.fillText("M O O N C A M", 540, 1800);
+  } else c = cardCanvas(1600);
+  let blob = await new Promise(r => c.toBlob(r, "image/jpeg", prefs.quality));
+  blob = await EX.writeExif(blob, {source: prefs.keepExif ? IV.meta.exif : null, gps: prefs.gps ? IV.meta.gps : null, keepGps: prefs.gps, when: IV.meta.when});
+  return {blob, name: `MoonCam_instant_${IV.model.id}_${Date.now()}.jpg`};
+}
+async function saveInstant() {
+  if (IV.saved || !IV.shot) return;
+  const it = await instantExport(); await saveBlobs([it], {quiet: true}); IV.saved = true; syncSaveBtn();
+  const card = cardCanvas(900), thumb = await new Promise(r => card.toBlob(r, "image/jpeg", .9));
+  await DB.instantAdd({id: Date.now() + "_" + Math.random().toString(36).slice(2, 6), time: IV.meta.when.getTime(), blob: thumb, model: IV.model.id}).catch(() => {});
+  setAlbumThumb(card);
+}
+async function closeInstant(save) {
+  cancelAnimationFrame(IV.raf); window.removeEventListener("devicemotion", onShakeDev);
+  if (save) { if (!IV.done) { IV.done = true; IV.p = 1; } await saveInstant(); }
+  $("#iov").hidden = true; const clip = $("#iov-clip"); clip.style.transition = "none"; clip.style.overflow = "hidden";
+}
+$("#iov-save").onclick = () => saveInstant();
+$("#iov-again").onclick = () => closeInstant(true);
+$("#iov-skip").onclick = () => { haptic(); if (!IV.done) { IV.p = 1; } else closeInstant(false).then(() => toast("ทิ้งรูปแล้ว", 1000)); };
+
+// ---------------------------------------------------------------- instant wall
+async function openWall() {
+  show("#v-wall"); const cards = (await DB.instantAll().catch(() => [])).sort((a, b) => b.time - a.time), g = $("#w-grid"); g.textContent = "";
+  $("#w-count").textContent = cards.length ? cards.length + " รูป · แตะเพื่อแชร์/บันทึก" : "ยังไม่มีรูป";
+  if (!cards.length) g.appendChild(note("ยังไม่มีรูปโพลารอยด์ — เลือกโหมดโพลารอยด์ในหน้ากล้องแล้วถ่ายเลย"));
+  cards.forEach((c, i) => { const im = el("img"); im.src = URL.createObjectURL(c.blob); im.style.setProperty("--r", ((i * 37) % 9 - 4) + "deg"); im.alt = "รูปโพลารอยด์";
+    im.onclick = () => { const b = el("div"), big = el("img"); big.src = im.src; big.style.cssText = "display:block;max-width:100%;max-height:46vh;margin:0 auto 10px;border-radius:4px"; b.appendChild(big);
+      b.appendChild(button(`${icon("share")} แชร์`, "big gold", () => shareBlobs([{blob: c.blob, name: `MoonCam_instant_${c.time}.jpg`}])));
+      b.appendChild(button(`${icon("download")} บันทึกอีกครั้ง`, "big ghost", () => saveBlobs([{blob: c.blob, name: `MoonCam_instant_${c.time}.jpg`}])));
+      b.appendChild(button("ลบออกจากกำแพง", "big ghost", async () => { await DB.instantDelete(c.id); closeSheet(); openWall(); }));
+      openSheet(new Date(c.time).toLocaleDateString("th-TH"), b); };
+    g.appendChild(im); });
+}
+$("#w-back").onclick = () => show("#v-cam");
+
+// ---------------------------------------------------------------- darkroom (full roll)
+async function showDarkroom() {
+  const shots = (await DB.rollAll().catch(() => [])).filter(s => !s.developed).sort((a, b) => a.time - b.time);
+  if (!shots.length) return;
+  const f = AN.filmOf(shots[0].film || prefs.film), ov = $("#darkroom"); ov.hidden = false; $("#dr-btns").hidden = true;
+  $("#dr-can").innerHTML = `<span class="fbox can-box" style="background:${f.box}"><em style="color:${f.boxInk}">${f.short[0]}<br>${f.short[1]}</em></span>`;
+  $("#dr-title").textContent = shots.length >= prefs.rollSize ? `ครบ ${shots.length} รูปแล้ว!` : `ล้างม้วนนี้ ${shots.length} รูป`;
+  $("#dr-msg").textContent = "กรอฟิล์มกลับ… กำลังล้างภาพในห้องมืด"; $("#dr-film").textContent = `${f.name.toUpperCase()} · ${shots.length} EXP`; $("#dr-date").textContent = new Date().toLocaleDateString("en-GB").replace(/\//g, ".");
+  const grid = $("#dr-grid"); grid.textContent = "";
+  const cells = shots.map(() => { const c = el("i"); grid.appendChild(c); return c; });
+  haptic([20, 30, 20, 30, 20]); motorSound(1.4);
+  await developRoll(); prefs.advanced = true; savePrefs(); camState.rollCount = 0;
+  const bar = $("#dr-bar"); bar.style.width = "0";
+  for (let i = 0; i < shots.length; i++) {
+    const s = shots[i]; try {
+      const bmp = await createImageBitmap(s.blob); const t = scaled(bmp, 220), id = pixels(t), st = s.settings;
+      if (st.ref) E.applyTransfer(id.data, st.ref, st.strength / 100); E.applyGrade(id.data, t.width, t.height, E.effective(st.adj, st.strength / 100)); t.getContext("2d").putImageData(id, 0, 0);
+      cells[i].appendChild(t); requestAnimationFrame(() => cells[i].classList.add("show"));
+    } catch (e) {}
+    bar.style.width = ((i + 1) / shots.length * 100) + "%";
+    await new Promise(r => setTimeout(r, 160));
+  }
+  $("#dr-msg").textContent = "ล้างเสร็จแล้ว — ภาพทั้งม้วนพร้อมดู"; $("#dr-btns").hidden = false; haptic([10, 40, 10]);
+  refreshRollChip().then(renderSkin);
+}
+$("#dr-view").onclick = () => { $("#darkroom").hidden = true; openRoll(); };
+$("#dr-new").onclick = () => { $("#darkroom").hidden = true; renderSkin(); openFilmSheet(); };
 
 // ================================================================== EDITOR
 async function openEditor(img, {blob = null, exif = null, gps = null, when = new Date(), fromCamera = false, name = "MoonCam"} = {}) {
@@ -837,10 +1139,10 @@ function showConsent() {
 async function refreshRollChip() {
   const shots = await DB.rollAll().catch(() => []), un = shots.filter(s => !s.developed).length, dev = shots.filter(s => s.developed).length;
   const chip = $("#roll-chip");
-  chip.hidden = camState.mode !== "roll" && !un && !dev;
+  chip.hidden = skinOn() || (!un && !dev);
   chip.innerHTML = `${icon("roll")} <span class="num">${un}/${prefs.rollSize}</span>${dev ? ` · ล้างแล้ว ${dev}` : ""}`;
   $("#shutter").classList.toggle("roll", camState.mode === "roll");
-  if (un >= prefs.rollSize) { toast("ม้วนฟิล์มเต็มแล้ว 🎞 กำลังล้างฟิล์ม…"); await developRoll(); }
+  camState.rollCount = un;
   return {un, dev};
 }
 async function developRoll() { const shots = await DB.rollAll(); for (const s of shots.filter(x => !x.developed)) { s.developed = true; await DB.rollAdd(s); } }
@@ -908,7 +1210,7 @@ async function dumpExport(forShare) {
 // ================================================================== events
 $("#shutter").onclick = shoot;
 $("#c-flip").onclick = () => { haptic(); const b = $("#c-flip"); b.classList.remove("spin"); void b.offsetWidth; b.classList.add("spin"); startCamera({facing: CAM.cam.facing === "user" ? "environment" : "user"}); };
-$("#c-album").onclick = openAlbumSheet;
+$("#c-album").onclick = () => camState.mode === "instant" ? openWall() : camState.mode === "roll" ? openRoll() : openAlbumSheet();
 $("#c-settings").onclick = () => { toggleQS(false); openSettings(); };
 $("#c-qs").onclick = () => { haptic(); toggleQS(); };
 $("#c-looks").onclick = () => { haptic(); setTray(camState.tray === "looks" ? "none" : "looks"); };
@@ -921,17 +1223,22 @@ $("#c-flash").onclick = async () => { haptic();
   const torch = CAM.manualCaps().torch, order = torch ? ["off", "on", "torch"] : ["off", "on"]; prefs.flash = order[(order.indexOf(prefs.flash) + 1) % order.length]; savePrefs();
   if (torch) await CAM.setTorch(prefs.flash === "torch"); updateHud(); toast({off: "ปิดแฟลช", on: "แฟลชตอนถ่าย", torch: "เปิดไฟฉาย"}[prefs.flash], 900);
 };
-const MODES = ["roll", "digicam", "photo", "pro"];
+const MODES = ["roll", "instant", "digicam", "photo", "pro"];
+const SPECIAL = {digicam: 1, instant: 1, roll: 1};
 function setMode(mode) {
   if (mode === camState.mode) return; haptic();
   document.querySelectorAll("#cam-modes button").forEach(x => x.classList.toggle("on", x.dataset.mode === mode));
-  if (camState.mode === "digicam" && mode !== "digicam") { S.body = camState.prevBody || "none"; const l = allLooks().find(x => x.id === camState.prevLook); if (l) applyLook(l, {commit: false}); }
-  if (mode === "digicam") { camState.prevBody = S.body; camState.prevLook = S.lookId; S.body = "ccd"; applyLook(PRESETS.find(l => l.id === "y2k_flash"), {commit: false}); toast("ดิจิคอม — กล้อง CCD ยุค 2000 แฟลชจัด วันที่สีส้ม", 1600); }
+  const was = camState.mode;
+  if (SPECIAL[was]) { S.body = camState.prevBody || "none"; const l = allLooks().find(x => x.id === camState.prevLook); if (l) applyLook(l, {commit: false}); }
+  if (SPECIAL[mode]) { camState.prevBody = S.body; camState.prevLook = S.lookId; }
   camState.mode = mode;
-  if (mode === "roll") toast(`ม้วนฟิล์ม — ถ่ายได้ ${prefs.rollSize} รูป ยังไม่เห็นภาพจนกว่าจะล้างฟิล์ม 🎞`, 2000);
+  if (mode === "digicam") { S.body = "ccd"; applyLook(PRESETS.find(l => l.id === "y2k_flash"), {commit: false}); toast("ดิจิคอม — กล้อง CCD ยุค 2000 แฟลชจัด วันที่สีส้ม", 1600); }
+  if (mode === "instant" || mode === "roll") { S.body = "none"; applySkinLook(); }
+  if (mode === "instant") toast(`โพลารอยด์ ${AN.instantOf(prefs.instantModel).name} — ถ่ายแล้วรูปค่อย ๆ ออกมา`, 1800);
+  if (mode === "roll") toast(`ม้วนฟิล์ม ${AN.filmOf(prefs.film).name} — ถ่ายครบ ${prefs.rollSize} รูปถึงจะล้างดูได้`, 2000);
   if (mode === "pro") toast("โปร — ปรับ ISO · Shutter · Focus · WB · EV ที่แถบด้านล่าง", 1600);
   if (mode !== "pro" && ["iso", "sh", "focus"].includes(ruler.k) && camState.tray === "ruler") setTray("none");
-  applyLivePreview(); renderCamLooks(); renderQbar(); updateHud(); refreshRollChip();
+  setSkin(); applyLivePreview(); renderCamLooks(); renderQbar(); updateHud(); refreshRollChip().then(renderSkin);
 }
 $("#cam-modes").onclick = e => { const b = e.target.closest("[data-mode]"); if (b) setMode(b.dataset.mode); };
 $("#roll-chip").onclick = openRoll;
