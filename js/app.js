@@ -23,7 +23,7 @@ const haptic = (ms = 8) => { try { navigator.vibrate && navigator.vibrate(ms); }
 let toastT; function toast(m, ms = 2600) { let t = $(".toast"); if (!t) { t = el("div", "toast"); t.setAttribute("role", "status"); document.body.appendChild(t); } t.textContent = m; t.hidden = false; t.style.animation = "none"; void t.offsetWidth; t.style.animation = ""; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, ms); }
 
 // ------------------------------------------------------------------ preferences & state
-const prefs = Object.assign({grid: true, center: false, gps: false, stripGpsOnShare: false, keepExif: true, quality: .95, deviceProfile: true, rollSize: 24, ratio: "3:4", timer: 0, flash: "off", lastLook: "teal_orange", strength: 100, level: false, histo: false, sound: true, mirror: true, tapShoot: false, tray: "looks"}, LS.get("prefs", {}));
+const prefs = Object.assign({grid: true, center: false, gps: false, stripGpsOnShare: false, keepExif: true, quality: .95, deviceProfile: true, rollSize: 24, ratio: "3:4", timer: 0, flash: "off", lastLook: "teal_orange", strength: 100, level: false, histo: false, sound: true, mirror: true, tapShoot: false, tray: "looks", editAfter: false}, LS.get("prefs", {}));
 const savePrefs = () => LS.set("prefs", prefs);
 let mine = LS.get("looks", []).map(l => Object.assign(l, {adj: E.A(l.adj)}));
 const saveMine = () => LS.set("looks", mine);
@@ -339,6 +339,7 @@ function renderQS() {
   tile("เสียงชัตเตอร์", prefs.sound ? "เปิด" : "ปิด", prefs.sound, () => { prefs.sound = !prefs.sound; savePrefs(); });
   tile("หมุดตำแหน่ง", prefs.gps ? "เปิด" : "ปิด", prefs.gps, () => setGps(!prefs.gps));
   tile("กล้องหน้า", prefs.mirror ? "กระจก" : "ตามจริง", prefs.mirror, () => { prefs.mirror = !prefs.mirror; savePrefs(); });
+  tile("หลังถ่าย", prefs.editAfter ? "เปิดแต่ง" : "บันทึกเลย", !prefs.editAfter, () => { prefs.editAfter = !prefs.editAfter; savePrefs(); });
   tile("แตะเพื่อถ่าย", prefs.tapShoot ? "เปิด" : "ปิด", prefs.tapShoot, () => { prefs.tapShoot = !prefs.tapShoot; savePrefs(); });
   tile("Device Sync", prefs.deviceProfile ? "เปิด" : "ปิด", prefs.deviceProfile, () => { prefs.deviceProfile = !prefs.deviceProfile; savePrefs(); });
   tile("ม้วนฟิล์ม", prefs.rollSize + " รูป", false, () => { prefs.rollSize = prefs.rollSize === 24 ? 36 : 24; savePrefs(); refreshRollChip(); });
@@ -417,8 +418,32 @@ async function shoot() {
       return;
     }
     const exif = untouched ? await EX.readExif(blob) : null;
-    await openEditor(shot, {blob: untouched ? blob : null, exif, gps, when, fromCamera: true, name: "MoonCam"});
+    const meta = {blob: untouched ? blob : null, exif, gps, when, fromCamera: true, name: "MoonCam"};
+    if (prefs.editAfter) await openEditor(shot, meta);
+    else instantSave(shot, meta, snap());
   } finally { shoot.busy = false; }
+}
+// ---------------------------------------------------------------- instant save (no editor): full-res render with the current look, saved in the background
+let saveQueue = Promise.resolve(), saving = 0;
+function instantSave(shot, meta, settings) {
+  camState.last = {shot, meta, settings};
+  saving++; $("#c-album").classList.add("saving");
+  saveQueue = saveQueue.then(async () => {
+    const keepS = snap(), keepSession = {...session};
+    try {
+      Object.assign(S, JSON.parse(settings));
+      session.full = scaled(shot, device.exportMax); session.prev = scaled(session.full, device.preview);
+      Object.assign(session, {blob: meta.blob, exif: meta.exif, gps: meta.gps, when: meta.when, fromCamera: true, name: meta.name, faces: null}); memo.clear();
+      const out = await exportBlob();
+      await saveBlobs([{blob: out, name: fileName()}], {quiet: true});
+    } catch (e) { toast("บันทึกไม่สำเร็จ: " + (e && e.message || e)); }
+    finally { Object.assign(session, keepSession); Object.assign(S, JSON.parse(keepS)); memo.clear(); if (!--saving) $("#c-album").classList.remove("saving"); }
+  });
+  return saveQueue;
+}
+async function editLast() {
+  const L = camState.last; if (!L) return; await saveQueue;
+  Object.assign(S, JSON.parse(L.settings)); await openEditor(L.shot, L.meta);
 }
 window.__mcShutter = () => { if (!$("#v-cam").hidden) shoot(); };
 
@@ -467,10 +492,10 @@ async function exportBlob({forShare = false} = {}) {
 const fileName = () => `MoonCam_${S.lookName.replace(/[^A-Za-z0-9ก-๙]+/g, "")}_${new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "")}.jpg`;
 function blobToB64(blob) { return new Promise(r => { const fr = new FileReader(); fr.onload = () => r(String(fr.result).split(",")[1]); fr.readAsDataURL(blob); }); }
 
-async function saveBlobs(items) { // items: [{blob,name}]
-  if (bridge && bridge.saveImage) { let ok = 0; for (const it of items) if (bridge.saveImage(await blobToB64(it.blob), it.name)) ok++; toast(ok === items.length ? `บันทึกลงแกลเลอรีแล้ว ${ok} รูป (Pictures/MoonCam)` : "บันทึกบางรูปไม่สำเร็จ"); return; }
+async function saveBlobs(items, {quiet = false} = {}) { // items: [{blob,name}]
+  if (bridge && bridge.saveImage) { let ok = 0; for (const it of items) if (bridge.saveImage(await blobToB64(it.blob), it.name)) ok++; toast(ok !== items.length ? "บันทึกบางรูปไม่สำเร็จ" : quiet ? "บันทึกลงแกลเลอรีแล้ว ✓" : `บันทึกลงแกลเลอรีแล้ว ${ok} รูป (Pictures/MoonCam)`, quiet ? 1200 : 2600); return; }
   for (const it of items) { const a = el("a"); a.href = URL.createObjectURL(it.blob); a.download = it.name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); await new Promise(r => setTimeout(r, 250)); }
-  toast(items.length > 1 ? `ดาวน์โหลด ${items.length} รูปแล้ว` : "บันทึกรูปแล้ว (โฟลเดอร์ดาวน์โหลด)");
+  toast(items.length > 1 ? `ดาวน์โหลด ${items.length} รูปแล้ว` : quiet ? "บันทึกแล้ว ✓" : "บันทึกรูปแล้ว (โฟลเดอร์ดาวน์โหลด)", quiet ? 1200 : 2600);
 }
 async function shareBlobs(items, pkg = "") {
   if (bridge && bridge.shareImages) { const arr = []; for (const it of items) arr.push({b64: await blobToB64(it.blob), name: it.name}); if (!bridge.shareImages(JSON.stringify(arr), pkg)) toast(pkg ? "ไม่พบแอปนี้ในเครื่อง — ลองปุ่ม 'แอปอื่น ๆ'" : "แชร์ไม่สำเร็จ"); return; }
@@ -739,7 +764,8 @@ function openLensSheet() {
 }
 function openAlbumSheet() {
   const b = el("div");
-  b.appendChild(button(`${icon("album")} แต่งรูปจากอัลบั้ม`, "big gold", () => { closeSheet(); $("#f-one").click(); }));
+  if (camState.last && !$("#v-cam").hidden) b.appendChild(button(`${icon("adjust")} แต่งรูปล่าสุด`, "big gold", () => { closeSheet(); editLast(); }));
+  b.appendChild(button(`${icon("album")} แต่งรูปจากอัลบั้ม`, camState.last && !$("#v-cam").hidden ? "big ghost" : "big gold", () => { closeSheet(); $("#f-one").click(); }));
   b.appendChild(button(`${icon("layers")} Photo Dump (เลือกหลายรูป)`, "big ghost", () => { closeSheet(); $("#f-many").click(); }));
   b.appendChild(button(`${icon("roll")} ม้วนฟิล์มของฉัน`, "big ghost", () => { closeSheet(); openRoll(); }));
   openSheet("อัลบั้ม", b);

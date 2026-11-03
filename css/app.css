@@ -240,3 +240,5 @@ input[type=range]:disabled{opacity:.3}
 .sheet{border-radius:26px 26px 0 0}
 .chip{height:34px;padding:0 14px;border-radius:17px}
 .lk{border-radius:14px}
+.album.saving::after{content:"";position:absolute;inset:-1px;border-radius:12px;border:2px solid transparent;border-top-color:var(--gold2);animation:spin360 .8s linear infinite}
+@keyframes spin360{to{transform:rotate(360deg)}}

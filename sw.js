@@ -1,6 +1,6 @@
 // MoonCam service worker: network-first for the page and app code (so updates arrive on the
 // next open), cache-first for heavy static assets (AI model, wasm, fonts). Works offline.
-const CACHE = "mooncam-v5";
+const CACHE = "mooncam-v5.1";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./css/app.css?v=5", "./js/app.js?v=5", "./js/engine.js", "./js/looks.js", "./js/fx.js",
   "./js/face.js", "./js/social.js", "./js/exif.js", "./js/camera.js", "./js/device.js", "./js/store.js", "./vendor/piexif.js", "./vendor/qrcode.js",
   "./icons/icon-192.png", "./icons/icon-512.png"];
