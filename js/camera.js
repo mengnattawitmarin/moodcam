@@ -37,13 +37,16 @@ export async function listLenses() {
   try {
     const devs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
     const back = devs.filter(d => !/front|user|facing front|หน้า/i.test(d.label));
+    // with the Android app, the real focal lengths come from Camera2 (camera2 <id> in the label) → true 0.6× / 1× / 3×
+    const nat = window.__camInfo, mainEq = nat && ((nat.cameras || []).find(c => c.facing === "หลัง") || {}).eq;
     cam.lenses = back.map((d, i) => {
-      const l = d.label.toLowerCase();
-      let tag = "1×"; if (/ultra|wide|0\.5|uw/.test(l)) tag = "0.5×"; else if (/tele|zoom|2x|3x|5x/.test(l)) tag = /5x/.test(l) ? "5×" : /3x/.test(l) ? "3×" : "2×";
-      return {id: d.deviceId, label: d.label || `กล้อง ${i + 1}`, tag};
+      const l = d.label.toLowerCase(), m = /camera2 (\d+)/.exec(l);
+      let tag = "1×", ratio = 1, eq = 0; if (/ultra|wide|0\.5|uw/.test(l)) { tag = "0.5×"; ratio = .5; } else if (/tele|zoom|2x|3x|5x/.test(l)) { ratio = /5x/.test(l) ? 5 : /3x/.test(l) ? 3 : 2; tag = ratio + "×"; }
+      if (nat && m && mainEq) { const c = (nat.cameras || []).find(c => String(c.id) === m[1]); if (c && c.eq) { eq = c.eq; ratio = Math.round(c.eq / mainEq * 10) / 10; tag = (ratio < .95 ? ratio.toFixed(1) : Math.abs(ratio - Math.round(ratio)) < .12 ? Math.round(ratio) : ratio.toFixed(1)) + "×"; } }
+      return {id: d.deviceId, label: d.label || `กล้อง ${i + 1}`, tag, ratio, eq, camId: m ? m[1] : null};
     });
-    // Same tag twice → number them so the user can still tell them apart
-    const seen = {}; cam.lenses.forEach(L => { seen[L.tag] = (seen[L.tag] || 0) + 1; if (seen[L.tag] > 1) L.tag += " " + seen[L.tag]; });
+    // one entry per focal length (logical + physical cameras often repeat the main lens)
+    const byRatio = {}; cam.lenses = cam.lenses.filter(L => { const k = Math.round(L.ratio * 10); if (nat && byRatio[k]) return false; byRatio[k] = 1; return true; });
   } catch (e) { cam.lenses = []; }
   return cam.lenses;
 }

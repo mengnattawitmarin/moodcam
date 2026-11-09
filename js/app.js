@@ -134,8 +134,9 @@ async function startCamera(opts = {}) {
     await CAM.start($("#video"), Object.assign({facing: CAM.cam.facing}, opts));
     $("#vf-nocam").hidden = true;
     $("#vf").classList.toggle("front", CAM.cam.facing === "user" && !opts.deviceId);
-    camState.ultra = !!(opts.deviceId && CAM.cam.lenses.find(l => l.id === opts.deviceId && l.tag.startsWith("0.5")));
-    if (!opts.keepZoom) { camState.zoom = camState.ultra ? .5 : 1; camState.digital = 1; }
+    const lens = opts.deviceId && CAM.cam.lenses.find(l => l.id === opts.deviceId);
+    camState.lensRatio = CAM.cam.facing === "user" ? 1 : lens ? lens.ratio || 1 : 1; camState.lensId = lens ? lens.id : null;
+    if (!opts.keepZoom) { camState.zoom = camState.lensRatio; camState.digital = 1; }
     if (CAM.manualCaps().ev && camState.ev) CAM.setEV(camState.ev);
     renderZoom(); applyLivePreview(); renderCamLooks(); renderQbar(); updateHud();
     setTimeout(snapshotThumbs, 600);
@@ -170,44 +171,58 @@ function layoutCam() {
 
 // ---------------------------------------------------------------- zoom (hardware where possible, digital beyond / otherwise)
 function zoomLimits() {
-  const z = CAM.manualCaps().zoom, ultra = CAM.cam.facing !== "user" && CAM.cam.lenses.find(l => l.tag.startsWith("0.5"));
-  const min = camState.ultra ? .5 : z && z.min < 1 ? z.min : ultra ? .5 : 1;
-  const max = Math.max(z ? z.max : 1, 10);
-  return {z, ultra, min, max};
+  const z = CAM.manualCaps().zoom, lr = camState.lensRatio || 1;
+  const min = lr * (z && z.min < 1 ? z.min : 1), max = Math.max(lr * (z ? z.max : 1), 10);
+  return {z, lr, min, max};
 }
 function setZoomLevel(v, {show = true} = {}) {
   const L = zoomLimits();
   v = Math.max(L.min, Math.min(L.max, v));
-  if (camState.ultra) { // on the ultra-wide lens: digital only, relative to 0.5×
-    camState.digital = Math.max(1, v / .5); camState.zoom = .5 * camState.digital;
-  } else if (L.z) {
-    const hz = Math.max(L.z.min, Math.min(L.z.max, v)); hwZoom(hz); camState.digital = Math.max(1, v / hz); camState.zoom = Math.max(v, L.z.min);
-  } else { camState.digital = Math.max(1, v); camState.zoom = camState.digital; }
+  const rel = v / L.lr;
+  if (L.z) { const hz = Math.max(L.z.min, Math.min(L.z.max, rel)); hwZoom(hz); camState.digital = Math.max(1, rel / hz); camState.zoom = L.lr * hz * camState.digital; }
+  else { camState.digital = Math.max(1, rel); camState.zoom = L.lr * camState.digital; }
   applyLivePreview(); renderZoom();
   if (show) { const t = $("#vf-zoom"); t.textContent = camState.zoom.toFixed(1).replace(/\.0$/, "") + "×"; t.hidden = false; clearTimeout(setZoomLevel.t); setZoomLevel.t = setTimeout(() => t.hidden = true, 700); }
 }
-function renderZoom() {
-  const L = zoomLimits(), pill = $("#zoom-pill"); pill.textContent = "";
+// the phone's real back lenses (0.6× / 1× / 3×…) the browser can open, plus the ones only the Android app reaches
+function lensStops() {
+  if (CAM.cam.facing === "user") return [{r: 1}, {r: 2}];
+  const L = zoomLimits(), web = CAM.cam.lenses.filter(l => l.ratio), nat = (window.__camInfo && window.__camInfo.lenses) || [];
   const stops = [];
-  if (L.min < 1) stops.push(+L.min.toFixed(1));
-  stops.push(1, 2); if (L.max >= 4) stops.push(4);
-  if (CAM.cam.facing === "user") stops.splice(0, stops.length, 1, 2);
-  const cur = camState.zoom;
-  // the stop the current zoom belongs to shows the live value (like the phone's own camera)
-  let active = 0; stops.forEach((s, i) => { if (cur >= s - .05) active = i; });
+  const add = (r, lens, nativeOnly) => { if (!stops.some(s => Math.abs(s.r - r) / r < .1)) stops.push({r, lens, nativeOnly}); };
+  web.forEach(l => add(l.ratio, l));
+  if (L.z && L.z.min < 1) add(+(L.lr * L.z.min).toFixed(1));
+  nat.forEach(n => add(+(+n.ratio).toFixed(1), null, true));
+  if (!stops.some(s => s.r > 1.5 && s.r < 2.5)) add(2);
+  if (!stops.some(s => Math.abs(s.r - 1) < .1)) add(1);
+  return stops.sort((a, b) => a.r - b.r);
+}
+async function goStop(s) {
+  const web = CAM.cam.lenses.filter(l => l.ratio);
+  // best real lens for this zoom: the longest one that is not longer than the target
+  let lens = s.lens || web.filter(l => l.ratio <= s.r + .02).sort((a, b) => b.ratio - a.ratio)[0];
+  if (!lens && s.r < 1) {
+    if (L0().z && L0().lr * L0().z.min <= s.r + .02) return setZoomLevel(s.r);
+    return toast(`เลนส์ ${s.r}× — เบราว์เซอร์มองไม่เห็นกล้องตัวนี้ ใช้ได้ในโหมดภาพยนตร์ของแอป Android`, 2200);
+  }
+  if (lens && lens.id !== camState.lensId && !(lens.ratio === 1 && !camState.lensId && camState.lensRatio === 1)) { await startCamera({deviceId: lens.id, keepZoom: true}); }
+  else if (!lens && camState.lensRatio !== 1) await startCamera({facing: "environment"});
+  setZoomLevel(s.r);
+  if (s.nativeOnly && s.r > 1.5) toast(`${s.r}× ตอนนี้เป็นซูมจากกล้องหลัก — เลนส์เทเลจริงใช้ในโหมดภาพยนตร์`, 1800);
+}
+const L0 = () => zoomLimits();
+function renderZoom() {
+  const pill = $("#zoom-pill"); pill.textContent = "";
+  const stops = lensStops(), cur = camState.zoom;
+  let active = 0; stops.forEach((s, i) => { if (cur >= s.r - .05) active = i; });
   stops.forEach((s, i) => {
     if (i) pill.appendChild(el("span", "dots", "···"));
-    const on = i === active, txt = on ? (Math.abs(cur - s) < .05 ? s + "x" : cur.toFixed(1) + "x") : String(s);
-    const b = el("button", on ? "on" : "", txt.replace(".0x", "x"));
-    b.onclick = e => { e.stopPropagation(); haptic();
-      if (s < 1 && !(L.z && L.z.min <= s) && L.ultra && !camState.ultra) return startCamera({deviceId: L.ultra.id});
-      if (s >= 1 && camState.ultra) return startCamera({facing: "environment"}).then(() => setZoomLevel(s));
-      setZoomLevel(s);
-    };
+    const on = i === active, txt = on ? (Math.abs(cur - s.r) < .05 ? s.r + "x" : cur.toFixed(1) + "x") : String(s.r);
+    const b = el("button", (on ? "on" : "") + (s.nativeOnly && !s.lens ? " nat" : ""), txt.replace(".0x", "x"));
+    b.onclick = e => { e.stopPropagation(); haptic(); goStop(s); };
     pill.appendChild(b);
   });
 }
-
 function liveFilter(a) {
   const b = Math.pow(2, a.exposure / 100 * 1.5) * (1 + a.fade / 100 * .06) * (1 - a.density / 100 * .18);
   const c = (a.contrast >= 0 ? 1 + a.contrast / 100 * .9 : 1 + a.contrast / 100 * .5) * (1 - a.fade / 100 * .2) * (1 - a.blacks / 100 * .25) * (1 + a.curve / 100 * .35 + a.density / 100 * .15);
@@ -1241,7 +1256,7 @@ function openCinemaSheet() {
     const back = (info.cameras || []).filter(c => c.facing === "หลัง"), main = back[0] || (info.cameras || [])[0] || {};
     const yes = v => v ? "✅" : "—";
     b.appendChild(note(`${info.model} · Android API ${info.android}`));
-    const rows = [["10-bit HLG (HEVC)", yes(main.tenBit) + (main.hdrProfiles && main.hdrProfiles.length ? " " + main.hdrProfiles.join(" · ") : "")], ["MoonLog (โค้ง log ใน ISP)", yes(main.logCurve)], ["ปรับ ISO / Shutter เอง", yes(main.manualSensor)], ["ระดับกล้อง", main.level || "?"], ["ความละเอียดวิดีโอ", (main.video || []).join(" · ")], ["ช่วง fps", (main.fps || []).join(" · ")], ["ISO", main.iso || "—"], ["Shutter", main.shutter || "—"], ["กันสั่น OIS", yes(main.ois)], ["กล้องหลังทั้งหมด", back.length + " ตัว"]];
+    const rows = [["10-bit HLG (HEVC)", yes(main.tenBit) + (main.hdrProfiles && main.hdrProfiles.length ? " " + main.hdrProfiles.join(" · ") : "")], ["MoonLog (โค้ง log ใน ISP)", yes(main.logCurve)], ["ปรับ ISO / Shutter เอง", yes(main.manualSensor)], ["ระดับกล้อง", main.level || "?"], ["ความละเอียดวิดีโอ", (main.video || []).join(" · ")], ["ช่วง fps", (main.fps || []).join(" · ")], ["ISO", main.iso || "—"], ["Shutter", main.shutter || "—"], ["กันสั่น OIS", yes(main.ois)], ["เลนส์ที่เจอ (Android)", (info.lenses || []).map(l => `${l.label}× ${l.eq}mm${l.via === "id" ? "*" : ""}`).join(" · ") || "—"], ["เลนส์ที่โหมดถ่ายรูปเปิดได้", CAM.cam.lenses.map(l => l.tag).join(" · ") || "—"], ["ช่วงซูมกล้องหลัก", main.zoom || "—"]];
     const t = el("div", "spec"); rows.forEach(([k, v]) => t.appendChild(el("div", "spec-row", `<span>${k}</span><b>${v}</b>`))); b.appendChild(t);
     b.appendChild(note(main.tenBit ? "เครื่องนี้ถ่าย 10-bit ได้ — เลือกโปรไฟล์ HLG 10-bit ในโหมดภาพยนตร์" : main.logCurve ? "เครื่องนี้ไม่เปิด 10-bit ให้แอปอื่น แต่ใช้ MoonLog (8-bit โค้ง log จากชิปกล้อง) ได้" : "เครื่องนี้ใช้ได้เฉพาะโปรไฟล์ Natural"));
     b.appendChild(button(`${icon("pro")} เปิดโหมดภาพยนตร์`, "big gold", () => { closeSheet(); bridge.openCinema(); }));
@@ -1416,6 +1431,7 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) { CAM
 
 // ================================================================== boot
 (async () => {
+  try { const ci = cameraInfo(); if (ci) window.__camInfo = ci; } catch (e) {}
   showAlbumThumb(LS.get("thumb", null)); setTray(camState.tray === "ruler" ? "looks" : camState.tray); if (prefs.level) level(true);
   device = await detectDevice().catch(() => device);
   const l = allLooks().find(x => x.id === prefs.lastLook) || PRESETS.find(x => x.id === "teal_orange"); applyLook(l, {commit: false});

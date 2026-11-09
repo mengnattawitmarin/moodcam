@@ -354,3 +354,4 @@ input[type=range]:disabled{opacity:.3}
 .dr-btns .big.gold{background:linear-gradient(180deg,#ffb3a0,#ff7a62);color:#2a0806}
 .skin-ctl{position:absolute;inset:0;z-index:6;pointer-events:none}
 .spec{border:1px solid var(--line2);border-radius:14px;overflow:hidden;margin:8px 0 10px}.spec-row{display:flex;justify-content:space-between;gap:10px;padding:9px 12px;font-size:12.5px;border-top:1px solid var(--line)}.spec-row:first-child{border-top:0}.spec-row span{color:var(--muted)}.spec-row b{font-weight:500;text-align:right}
+.zoom-pill button.nat{color:rgba(255,255,255,.6)}

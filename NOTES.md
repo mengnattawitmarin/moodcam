@@ -68,3 +68,4 @@ _(ยังไม่มี)_
 - โปรไฟล์: Natural (H.264) · MoonLog (โค้ง log ผ่าน TONEMAP_CURVE ใน ISP) · HLG 10-bit (HEVC Main10, Android 13+ ถ้าเครื่องรองรับ)
 - บันทึก Movies/MoonCam · เช็กมือถือในตั้งค่า · LUT .cube MoonLog→709 และ HLG→709
 - ยังไม่มี: False Color/Zebra/Peaking/View-assist LUT (ต้องใช้ GPU shader) · ถ้า HLG ไม่ติด tag HLG ในไฟล์ ให้ใช้ LUT แปลง
+- ซิงค์เลนส์ (9 พ.ย.): คำนวณระยะเท่า 35mm ของกล้องจริงทุกตัว → ปุ่ม 0.6×/1×/เทเล · ภาพยนตร์: สลับด้วย CONTROL_ZOOM_RATIO ของกล้อง logical (HAL สลับเลนส์จริง) หรือเปิดกล้องแยกตาม id + นิ้วซูม · ภาพนิ่ง: จับคู่ deviceId ("camera2 N") กับระยะเลนส์จริงจากแอป · เลนส์ที่เว็บมองไม่เห็นแจ้งให้ใช้โหมดภาพยนตร์

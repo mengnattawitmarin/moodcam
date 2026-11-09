@@ -46,6 +46,8 @@ import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.util.Range;
 import android.util.Size;
+import android.util.SizeF;
+import android.view.ScaleGestureDetector;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.Surface;
@@ -102,6 +104,7 @@ public class CinemaActivity extends Activity {
     boolean capManual, cap10, capCurve; Range<Integer> isoRange; Range<Long> expRange; Range<Integer> evRange; float minFocus;
     final List<Integer> fpsList = new ArrayList<>(); final List<String> resList = new ArrayList<>(); final List<String> profList = new ArrayList<>();
     int liveIso = 0; long liveExp = 0; long lastUi = 0;
+    String mainId; List<Lens> lenses = new ArrayList<>(); int lensIdx = 0; float zoomRatio = 1f; Range<Float> zoomRange; LinearLayout lensCol;
 
     // UI
     FrameLayout root; LinearLayout bar, panel; TextView tc, info, panelLabel, recDot; SeekBar panelSeek; Button panelAuto; FrameLayout recBtn; View recInner;
@@ -157,7 +160,15 @@ public class CinemaActivity extends Activity {
                 if (f != null && f == CameraCharacteristics.LENS_FACING_BACK) { camId = id; ch = c; break; }
             }
             if (camId == null) { camId = cm.getCameraIdList()[0]; ch = cm.getCameraCharacteristics(camId); }
+            mainId = camId;
+            try { lenses = lensPlan(cm); } catch (Exception e) { lenses = new ArrayList<>(); }
+            for (int i = 0; i < lenses.size(); i++) if (lenses.get(i).ratio == 1f) lensIdx = i;
         } catch (Exception e) { toast("เปิดกล้องไม่ได้: " + e.getMessage()); finish(); return; }
+        readCaps();
+    }
+    void readCaps() {
+        fpsList.clear(); resList.clear(); profList.clear();
+        zoomRange = Build.VERSION.SDK_INT >= 30 ? ch.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE) : null;
         int[] caps = ch.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES);
         capManual = has(caps, CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_MANUAL_SENSOR);
         cap10 = false;
@@ -188,6 +199,30 @@ public class CinemaActivity extends Activity {
 
         profList.add("natural"); if (capCurve) profList.add("log8"); if (cap10) profList.add("hlg10");
         if (!profList.contains(profile)) profile = "natural";
+    }
+    void selectLens(int i) {
+        if (i < 0 || i >= lenses.size()) return;
+        Lens l = lenses.get(i); String target = l.zoom ? mainId : l.camId;
+        if (!target.equals(camId)) {
+            if (recording) { toast("หยุดบันทึกก่อนสลับกล้องตัวนี้"); return; }
+            try { camId = target; ch = cm.getCameraCharacteristics(camId); } catch (Exception e) { toast("สลับเลนส์ไม่ได้"); return; }
+            readCaps(); lensIdx = i; zoomRatio = l.zoom ? l.ratio : 1f;
+            if (bg != null) bg.post(() -> { closeCamera(); openCamera(); });
+        } else { lensIdx = i; zoomRatio = l.zoom ? l.ratio : 1f; updateRepeating(); }
+        toast("เลนส์ " + l.label + "× · " + Math.round(l.eq) + "mm" + (l.zoom ? "" : " (กล้องแยก)"));
+        renderLenses(); refreshChips();
+    }
+    void renderLenses() {
+        if (lensCol == null) return; lensCol.removeAllViews();
+        for (int i = 0; i < lenses.size(); i++) {
+            final int idx = i; Lens l = lenses.get(i); boolean on = i == lensIdx;
+            TextView b = new TextView(this); b.setGravity(Gravity.CENTER); b.setTextSize(12); b.setTypeface(Typeface.DEFAULT_BOLD);
+            String txt = l.label; if (on && l.zoom && Math.abs(zoomRatio - l.ratio) > 0.05f) txt = String.format(Locale.US, "%.1f", zoomRatio);
+            b.setText(txt + "×"); b.setTextColor(on ? GOLD : INK);
+            GradientDrawable g = new GradientDrawable(); g.setShape(GradientDrawable.OVAL); g.setColor(on ? 0xCC1B1408 : 0x99000000); if (on) g.setStroke(dp(1.5f), GOLD); b.setBackground(g);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(46), dp(46)); lp.setMargins(0, dp(5), 0, dp(5));
+            b.setOnClickListener(v -> selectLens(idx)); lensCol.addView(b, lp);
+        }
     }
     static boolean has(int[] a, int v) { if (a == null) return false; for (int x : a) if (x == v) return true; return false; }
     static boolean hasSize(Size[] a, int w, int h) { if (a == null) return false; for (Size s : a) if (s.getWidth() == w && s.getHeight() == h) return true; return false; }
@@ -306,6 +341,7 @@ public class CinemaActivity extends Activity {
         if (manualFocus && minFocus > 0) { b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF); b.set(CaptureRequest.LENS_FOCUS_DISTANCE, focusDist); }
         else { b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO); if (afRegions != null) b.set(CaptureRequest.CONTROL_AF_REGIONS, afRegions); }
         b.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, stab ? CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON : CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF);
+        if (zoomRange != null && Build.VERSION.SDK_INT >= 30) b.set(CaptureRequest.CONTROL_ZOOM_RATIO, Math.max(zoomRange.getLower(), Math.min(zoomRange.getUpper(), zoomRatio)));
         if ("log8".equals(profile) && capCurve) { b.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE); b.set(CaptureRequest.TONEMAP_CURVE, logCurve()); }
     }
     Range<Integer> fpsRange() {
@@ -384,7 +420,22 @@ public class CinemaActivity extends Activity {
             @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture s) { return true; }
             @Override public void onSurfaceTextureUpdated(SurfaceTexture s) {}
         });
-        tv.setOnTouchListener((v, e) -> { if (e.getAction() == MotionEvent.ACTION_UP) tapFocus(e.getX(), e.getY(), v.getWidth(), v.getHeight()); return true; });
+        final boolean[] scaled = {false};
+        final ScaleGestureDetector sg = new ScaleGestureDetector(this, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            @Override public boolean onScale(ScaleGestureDetector d) {
+                if (zoomRange == null) return false; scaled[0] = true;
+                zoomRatio = Math.max(zoomRange.getLower(), Math.min(Math.min(zoomRange.getUpper(), 10f), zoomRatio * d.getScaleFactor()));
+                // the lens button that matches the current zoom lights up
+                if (camId.equals(mainId)) { int best = lensIdx; for (int i = 0; i < lenses.size(); i++) { Lens l = lenses.get(i); if (l.zoom && zoomRatio >= l.ratio - 0.02f) best = i; } lensIdx = best; }
+                updateRepeating(); renderLenses(); return true;
+            }
+        });
+        tv.setOnTouchListener((v, e) -> {
+            sg.onTouchEvent(e);
+            if (e.getActionMasked() == MotionEvent.ACTION_DOWN) scaled[0] = false;
+            if (e.getActionMasked() == MotionEvent.ACTION_UP && !scaled[0]) tapFocus(e.getX(), e.getY(), v.getWidth(), v.getHeight());
+            return true;
+        });
 
         // top bar of chips
         HorizontalScrollView hs = new HorizontalScrollView(this); hs.setHorizontalScrollBarEnabled(false);
@@ -410,6 +461,9 @@ public class CinemaActivity extends Activity {
         recBtn.addView(recInner, new FrameLayout.LayoutParams(dp(54), dp(54), Gravity.CENTER));
         FrameLayout.LayoutParams rl = new FrameLayout.LayoutParams(dp(76), dp(76), Gravity.END | Gravity.CENTER_VERTICAL); rl.setMarginEnd(dp(18));
         root.addView(recBtn, rl); recBtn.setOnClickListener(v -> toggleRec());
+        lensCol = new LinearLayout(this); lensCol.setOrientation(LinearLayout.VERTICAL); lensCol.setGravity(Gravity.CENTER);
+        FrameLayout.LayoutParams ll = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END | Gravity.CENTER_VERTICAL); ll.setMarginEnd(dp(108));
+        root.addView(lensCol, ll); renderLenses();
 
         // timecode + meter (bottom left)
         LinearLayout bl = new LinearLayout(this); bl.setOrientation(LinearLayout.VERTICAL); bl.setPadding(dp(14), dp(8), dp(14), dp(8));
@@ -596,6 +650,43 @@ public class CinemaActivity extends Activity {
         }
     }
 
+    // ------------------------------------------------------------------ lenses: real cameras → 0.6× / 1× / 3× like the phone's own app
+    static class Lens { String label; float ratio, eq; String camId; boolean zoom; }
+    static float eqFocal(CameraCharacteristics c) {
+        float[] fl = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS); SizeF s = c.get(CameraCharacteristics.SENSOR_INFO_PHYSICAL_SIZE);
+        if (fl == null || fl.length == 0 || s == null) return 0;
+        return (float) (fl[0] * 43.27 / Math.hypot(s.getWidth(), s.getHeight()));
+    }
+    static String ratioLabel(float r) { if (r < 0.95f) return String.format(Locale.US, "%.1f", r); return Math.abs(r - Math.round(r)) < 0.12f ? String.valueOf(Math.round(r)) : String.format(Locale.US, "%.1f", r); }
+    static List<Lens> lensPlan(CameraManager cm) throws CameraAccessException {
+        List<Lens> out = new ArrayList<>(); List<String> backs = new ArrayList<>();
+        for (String id : cm.getCameraIdList()) { Integer f = cm.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING); if (f != null && f == CameraCharacteristics.LENS_FACING_BACK) backs.add(id); }
+        if (backs.isEmpty()) return out;
+        String main = backs.get(0); CameraCharacteristics mc = cm.getCameraCharacteristics(main); float mainEq = eqFocal(mc);
+        Range<Float> zr = Build.VERSION.SDK_INT >= 30 ? mc.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE) : null;
+        Lens m = new Lens(); m.ratio = 1f; m.eq = mainEq; m.camId = main; m.zoom = zr != null; m.label = "1"; out.add(m);
+        List<String> candIds = new ArrayList<>(); List<Float> candEq = new ArrayList<>();
+        if (Build.VERSION.SDK_INT >= 28) for (String pid : mc.getPhysicalCameraIds()) { try { candIds.add(null); candEq.add(eqFocal(cm.getCameraCharacteristics(pid))); } catch (Exception ignored) {} }
+        for (int i = 1; i < backs.size(); i++) { candIds.add(backs.get(i)); candEq.add(eqFocal(cm.getCameraCharacteristics(backs.get(i)))); }
+        for (int i = 0; i < candEq.size(); i++) {
+            float eq = candEq.get(i); if (eq <= 0 || mainEq <= 0) continue;
+            float r = eq / mainEq; if (Math.abs(r - 1) < 0.15f) continue;
+            boolean dup = false; for (Lens l : out) if (Math.abs(l.ratio - r) / r < 0.12f) dup = true; if (dup) continue;
+            Lens l = new Lens(); l.eq = eq;
+            if (zr != null && r >= zr.getLower() - 0.06f && r <= zr.getUpper()) { l.zoom = true; l.ratio = Math.max(zr.getLower(), r); l.camId = main; }
+            else if (candIds.get(i) != null) { l.zoom = false; l.ratio = r; l.camId = candIds.get(i); }
+            else continue;
+            l.label = ratioLabel(l.ratio); out.add(l);
+        }
+        // logical camera that hides its ultra-wide but still reaches it through the zoom ratio
+        boolean hasUw = false; for (Lens l : out) if (l.ratio < 0.95f) hasUw = true;
+        if (!hasUw && zr != null && zr.getLower() < 0.95f) { Lens l = new Lens(); l.zoom = true; l.ratio = zr.getLower(); l.eq = mainEq * l.ratio; l.camId = main; l.label = ratioLabel(l.ratio); out.add(l); }
+        boolean hasTwo = false; for (Lens l : out) if (l.ratio > 1.5f) hasTwo = true;
+        if (!hasTwo && zr != null && zr.getUpper() >= 2f) { Lens l = new Lens(); l.zoom = true; l.ratio = 2f; l.eq = mainEq * 2; l.camId = main; l.label = "2"; out.add(l); }
+        out.sort((a, b) -> Float.compare(a.ratio, b.ratio));
+        return out;
+    }
+
     // ------------------------------------------------------------------ device check (for the web "เช็กมือถือ" sheet)
     static String cameraInfoJson(Context ctx) {
         JSONObject o = new JSONObject();
@@ -629,10 +720,16 @@ public class CinemaActivity extends Activity {
                 Range<Integer> iso = c.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE); if (iso != null) j.put("iso", iso.getLower() + "-" + iso.getUpper());
                 Range<Long> ex = c.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE); if (ex != null) j.put("shutter", "1/" + Math.round(1e9 / ex.getLower()) + " - " + (ex.getUpper() >= 1e9 ? Math.round(ex.getUpper() / 1e9) + "s" : "1/" + Math.round(1e9 / ex.getUpper())));
                 float[] fl = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_FOCAL_LENGTHS); if (fl != null && fl.length > 0) j.put("focal", fl[0]);
+                j.put("eq", Math.round(eqFocal(c)));
+                if (Build.VERSION.SDK_INT >= 28) j.put("physical", new JSONArray(c.getPhysicalCameraIds()));
+                if (Build.VERSION.SDK_INT >= 30) { Range<Float> zr = c.get(CameraCharacteristics.CONTROL_ZOOM_RATIO_RANGE); if (zr != null) j.put("zoom", String.format(Locale.US, "%.2f-%.1f", zr.getLower(), zr.getUpper())); }
                 j.put("ois", has(c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION), CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON));
                 cams.put(j);
             }
             o.put("cameras", cams);
+            JSONArray ls = new JSONArray();
+            for (Lens l : lensPlan(cm)) { JSONObject j = new JSONObject(); j.put("label", l.label); j.put("ratio", l.ratio); j.put("eq", Math.round(l.eq)); j.put("camId", l.camId); j.put("via", l.zoom ? "zoom" : "id"); ls.put(j); }
+            o.put("lenses", ls);
         } catch (Exception e) { try { o.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) {} }
         return o.toString();
     }
