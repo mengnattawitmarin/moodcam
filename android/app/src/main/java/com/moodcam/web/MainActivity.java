@@ -233,6 +233,12 @@ public class MainActivity extends Activity {
 
         /** Exact manufacturer / model / memory for Device Sync. */
         @JavascriptInterface
+        public void openCinema() { runOnUiThread(() -> startActivity(new android.content.Intent(MainActivity.this, CinemaActivity.class))); }
+
+        @JavascriptInterface
+        public String getCameraInfo() { return CinemaActivity.cameraInfoJson(MainActivity.this); }
+
+        @JavascriptInterface
         public String getDeviceInfo() {
             try {
                 ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();

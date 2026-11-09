@@ -1090,6 +1090,7 @@ function openSettings() {
   b.appendChild(toggle("เก็บข้อมูลกล้อง (EXIF)", prefs.keepExif, v => { prefs.keepExif = v; savePrefs(); }));
   b.appendChild(button(`${icon("shield")} นโยบายความเป็นส่วนตัว`, "big ghost", openPolicy));
   b.appendChild(button(`${icon("chip")} เครื่องของคุณ (Device Sync)`, "big ghost", openDeviceSheet));
+  b.appendChild(button(`${icon("pro")} เช็กมือถือ · โหมดภาพยนตร์ / 10-bit`, "big ghost", openCinemaSheet));
   b.appendChild(button("ถอนความยินยอม", "big ghost", () => { LS.set("consent", null); prefs.gps = false; savePrefs(); watchGps(false); closeSheet(); CAM.stop(); showConsent(); }));
   b.appendChild(button("ลบข้อมูลทั้งหมดในแอป", "big ghost", async () => {
     if (!confirm("ลบ My Looks, ม้วนฟิล์ม, การตั้งค่า และแคชทั้งหมดในเครื่องนี้? (รูปที่บันทึกในแกลเลอรีจะไม่ถูกลบ)")) return;
@@ -1224,8 +1225,52 @@ $("#c-flash").onclick = async () => { haptic();
   if (torch) await CAM.setTorch(prefs.flash === "torch"); updateHud(); toast({off: "ปิดแฟลช", on: "แฟลชตอนถ่าย", torch: "เปิดไฟฉาย"}[prefs.flash], 900);
 };
 const MODES = ["roll", "instant", "digicam", "photo", "pro"];
+// ---------------------------------------------------------------- cinema (native Android screen) + LUTs
+function openCinema() {
+  haptic();
+  if (bridge && bridge.openCinema) { bridge.openCinema(); return; }
+  openCinemaSheet();
+}
+function cameraInfo() { try { return bridge && bridge.getCameraInfo ? JSON.parse(bridge.getCameraInfo()) : null; } catch (e) { return null; } }
+function openCinemaSheet() {
+  const b = el("div"), info = cameraInfo();
+  if (!info) {
+    b.appendChild(note(bridge ? "แอปเวอร์ชันนี้ยังไม่มีโหมดภาพยนตร์ — ติดตั้ง APK ตัวใหม่จากลิงก์เดิม" : "โหมดภาพยนตร์ (log / 10-bit) ใช้กล้องของ Android โดยตรง จึงใช้ได้ในแอป MoonCam สำหรับ Android เท่านั้น — เว็บและ iPhone ยังไม่รองรับ"));
+    if (!bridge) b.appendChild(button(`${icon("download")} ดาวน์โหลดแอป Android (APK)`, "big gold", () => { location.href = "MoodCam.apk"; }));
+  } else {
+    const back = (info.cameras || []).filter(c => c.facing === "หลัง"), main = back[0] || (info.cameras || [])[0] || {};
+    const yes = v => v ? "✅" : "—";
+    b.appendChild(note(`${info.model} · Android API ${info.android}`));
+    const rows = [["10-bit HLG (HEVC)", yes(main.tenBit) + (main.hdrProfiles && main.hdrProfiles.length ? " " + main.hdrProfiles.join(" · ") : "")], ["MoonLog (โค้ง log ใน ISP)", yes(main.logCurve)], ["ปรับ ISO / Shutter เอง", yes(main.manualSensor)], ["ระดับกล้อง", main.level || "?"], ["ความละเอียดวิดีโอ", (main.video || []).join(" · ")], ["ช่วง fps", (main.fps || []).join(" · ")], ["ISO", main.iso || "—"], ["Shutter", main.shutter || "—"], ["กันสั่น OIS", yes(main.ois)], ["กล้องหลังทั้งหมด", back.length + " ตัว"]];
+    const t = el("div", "spec"); rows.forEach(([k, v]) => t.appendChild(el("div", "spec-row", `<span>${k}</span><b>${v}</b>`))); b.appendChild(t);
+    b.appendChild(note(main.tenBit ? "เครื่องนี้ถ่าย 10-bit ได้ — เลือกโปรไฟล์ HLG 10-bit ในโหมดภาพยนตร์" : main.logCurve ? "เครื่องนี้ไม่เปิด 10-bit ให้แอปอื่น แต่ใช้ MoonLog (8-bit โค้ง log จากชิปกล้อง) ได้" : "เครื่องนี้ใช้ได้เฉพาะโปรไฟล์ Natural"));
+    b.appendChild(button(`${icon("pro")} เปิดโหมดภาพยนตร์`, "big gold", () => { closeSheet(); bridge.openCinema(); }));
+  }
+  b.appendChild(label("LUT สำหรับตัดต่อ (CapCut · Premiere · DaVinci · LumaFusion)"));
+  b.appendChild(button(`${icon("download")} LUT MoonLog → ปกติ (.cube)`, "big ghost", () => saveBlobs([{blob: new Blob([makeCube("moonlog")], {type: "text/plain"}), name: "MoonCam_MoonLog_to_Rec709.cube"}])));
+  b.appendChild(button(`${icon("download")} LUT HLG 10-bit → ปกติ (.cube)`, "big ghost", () => saveBlobs([{blob: new Blob([makeCube("hlg")], {type: "text/plain"}), name: "MoonCam_HLG_to_Rec709.cube"}])));
+  openSheet("โหมดภาพยนตร์", b);
+}
+function makeCube(kind, N = 33) {
+  const oetf = L => { L = Math.max(0, Math.min(1, L)); return L < .018 ? 4.5 * L : 1.099 * Math.pow(L, .45) - .099; };
+  const moonInv = y => Math.max(0, Math.expm1((y - .075) / .86 * Math.log1p(38)) / 38);
+  const a = .17883277, bb = .28466892, c = .55991073, hlgInv = v => v <= .5 ? v * v / 3 : (Math.exp((v - c) / a) + bb) / 12;
+  const tm = x => Math.max(0, x) * 1.25 / (1 + .25 * Math.max(0, x));
+  let out = `TITLE "MoonCam ${kind === "hlg" ? "HLG10" : "MoonLog"} to Rec.709"\nLUT_3D_SIZE ${N}\nDOMAIN_MIN 0 0 0\nDOMAIN_MAX 1 1 1\n`;
+  for (let bi = 0; bi < N; bi++) for (let gi = 0; gi < N; gi++) for (let ri = 0; ri < N; ri++) {
+    let r = ri / (N - 1), g = gi / (N - 1), b = bi / (N - 1), R, G, B;
+    if (kind === "hlg") {
+      const lr = hlgInv(r), lg = hlgInv(g), lb = hlgInv(b);
+      R = 1.6605 * lr - .5876 * lg - .0728 * lb; G = -.1246 * lr + 1.1329 * lg - .0083 * lb; B = -.0182 * lr - .1006 * lg + 1.1187 * lb;
+      R = oetf(tm(R * 3.4)); G = oetf(tm(G * 3.4)); B = oetf(tm(B * 3.4));
+    } else { R = oetf(tm(moonInv(r) * 1.1)); G = oetf(tm(moonInv(g) * 1.1)); B = oetf(tm(moonInv(b) * 1.1)); }
+    out += `${R.toFixed(6)} ${G.toFixed(6)} ${B.toFixed(6)}\n`;
+  }
+  return out;
+}
 const SPECIAL = {digicam: 1, instant: 1, roll: 1};
 function setMode(mode) {
+  if (mode === "cinema") return openCinema();
   if (mode === camState.mode) return; haptic();
   document.querySelectorAll("#cam-modes button").forEach(x => x.classList.toggle("on", x.dataset.mode === mode));
   const was = camState.mode;
