@@ -114,6 +114,8 @@ public class CinemaActivity extends Activity {
     static final int[] ISO_STEPS = {50, 64, 80, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 2000, 2500, 3200, 4000, 5000, 6400, 8000, 10000, 12800};
     static final int[] SH_STEPS = {24, 25, 30, 48, 50, 60, 96, 100, 120, 125, 180, 250, 500, 1000, 2000, 4000, 8000};
     static final int REQ_LUT = 41;
+    static final int BAR = 0xF20D0E10, LABEL = 0xFF8C9096, WHITE = 0xFFF2F2F2, AUTOC = 0xFF8FD3FF, AMBER = 0xFFF5B83D, TOPBAR = 50, BOTBAR = 46;
+    LinearLayout bot, tcBox; TextView clipTv, batTv; ScopeView scope; int scopeMode = 0, quality = 1; long batAt = 0; String batTxt = "";
     String mainId; List<Lens> lenses = new ArrayList<>(); int lensIdx = 0; float zoomRatio = 1f; Range<Float> zoomRange; LinearLayout lensCol;
 
     // UI
@@ -129,7 +131,7 @@ public class CinemaActivity extends Activity {
         fps = sp.getInt("fps", 30); res = sp.getString("res", "1080"); profile = sp.getString("profile", "natural");
         stab = sp.getBoolean("stab", true); guide = sp.getInt("guide", 1);
         lutIdx = sp.getInt("lut", -1); rotOffset = sp.getInt("rotOffset", 0); shutterDen = sp.getInt("shutterDen", 0);
-        loadCustomLut();
+        loadCustomLut(); quality = sp.getInt("quality", 1); scopeMode = sp.getInt("scope", 1);
         pickCamera();
         buildUi();
     }
@@ -256,11 +258,13 @@ public class CinemaActivity extends Activity {
         return best;
     }
     int bitrate() {
-        int base = "4K".equals(res) ? 60_000_000 : "720".equals(res) ? 12_000_000 : 24_000_000;
-        if (fps >= 50) base = base * 3 / 2;
-        if ("hlg10".equals(profile)) base = base * 5 / 4;
-        return base;
+        int[] t = "4K".equals(res) ? new int[]{60, 110, 160} : "720".equals(res) ? new int[]{12, 20, 30} : new int[]{24, 45, 70};
+        double m = t[Math.max(0, Math.min(2, quality))];
+        if (fps >= 50) m *= 1.4;
+        if ("hlg10".equals(profile)) m *= 1.15;
+        return (int) (m * 1_000_000);
     }
+    boolean useHevc() { return "hlg10".equals(profile) || quality >= 1; }
     String profName(String p) { return "hlg10".equals(p) ? "HLG 10-bit" : "log8".equals(p) ? "MoonLog" : "Natural"; }
 
     // ------------------------------------------------------------------ camera
@@ -311,7 +315,8 @@ public class CinemaActivity extends Activity {
         if (bg != null) bg.post(this::createSession);
     }
 
-    MediaRecorder buildRecorder(String path, java.io.FileDescriptor fd, boolean audio) throws Exception {
+    MediaRecorder buildRecorder(String path, java.io.FileDescriptor fd, boolean audio) throws Exception { return buildRecorder(path, fd, audio, 1); }
+    MediaRecorder buildRecorder(String path, java.io.FileDescriptor fd, boolean audio, int channels) throws Exception {
         MediaRecorder r = Build.VERSION.SDK_INT >= 31 ? new MediaRecorder(this) : new MediaRecorder();
         if (audio) r.setAudioSource(MediaRecorder.AudioSource.CAMCORDER);
         r.setVideoSource(MediaRecorder.VideoSource.SURFACE);
@@ -321,9 +326,9 @@ public class CinemaActivity extends Activity {
         r.setVideoFrameRate(fps);
         r.setVideoSize(videoSize.getWidth(), videoSize.getHeight());
         boolean hlg = "hlg10".equals(profile);
-        r.setVideoEncoder(hlg ? MediaRecorder.VideoEncoder.HEVC : MediaRecorder.VideoEncoder.H264);
+        r.setVideoEncoder(useHevc() ? MediaRecorder.VideoEncoder.HEVC : MediaRecorder.VideoEncoder.H264);
         if (hlg) r.setVideoEncodingProfileLevel(MediaCodecInfo.CodecProfileLevel.HEVCProfileMain10, MediaCodecInfo.CodecProfileLevel.HEVCMainTierLevel51);
-        if (audio) { r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC); r.setAudioEncodingBitRate(192000); r.setAudioSamplingRate(48000); r.setAudioChannels(1); }
+        if (audio) { r.setAudioEncoder(MediaRecorder.AudioEncoder.AAC); r.setAudioEncodingBitRate(channels == 2 ? 256000 : 160000); r.setAudioSamplingRate(48000); r.setAudioChannels(channels); }
         r.setInputSurface(recSurface);
         r.setOrientationHint(orientationHint());
         return r;
@@ -364,6 +369,11 @@ public class CinemaActivity extends Activity {
         b.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, stab ? CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON : CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF);
         if (zoomRange != null && Build.VERSION.SDK_INT >= 30) b.set(CaptureRequest.CONTROL_ZOOM_RATIO, Math.max(zoomRange.getLower(), Math.min(zoomRange.getUpper(), zoomRatio)));
         if ("log8".equals(profile) && capCurve) { b.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE); b.set(CaptureRequest.TONEMAP_CURVE, logCurve()); }
+        if (quality == 2) { // MAX: hand the encoder a cleaner, less processed picture for grading
+            if (has(ch.get(CameraCharacteristics.EDGE_AVAILABLE_EDGE_MODES), CameraMetadata.EDGE_MODE_OFF)) b.set(CaptureRequest.EDGE_MODE, CaptureRequest.EDGE_MODE_OFF);
+            if (has(ch.get(CameraCharacteristics.NOISE_REDUCTION_AVAILABLE_NOISE_REDUCTION_MODES), CameraMetadata.NOISE_REDUCTION_MODE_MINIMAL)) b.set(CaptureRequest.NOISE_REDUCTION_MODE, CaptureRequest.NOISE_REDUCTION_MODE_MINIMAL);
+            if (has(ch.get(CameraCharacteristics.COLOR_CORRECTION_AVAILABLE_ABERRATION_MODES), CameraMetadata.COLOR_CORRECTION_ABERRATION_MODE_HIGH_QUALITY)) b.set(CaptureRequest.COLOR_CORRECTION_ABERRATION_MODE, CaptureRequest.COLOR_CORRECTION_ABERRATION_MODE_HIGH_QUALITY);
+        }
     }
     Range<Integer> fpsRange() {
         Range<Integer>[] fr = ch.get(CameraCharacteristics.CONTROL_AE_AVAILABLE_TARGET_FPS_RANGES); Range<Integer> best = null;
@@ -372,8 +382,8 @@ public class CinemaActivity extends Activity {
         return best != null ? best : new Range<>(fps, fps);
     }
     /** MoonLog: lifted blacks, long highlight roll-off (log-shaped), same curve on R/G/B. */
-    static TonemapCurve logCurve() {
-        int n = 32; float[] p = new float[n * 2];
+    TonemapCurve logCurve() {
+        Integer mx = ch.get(CameraCharacteristics.TONEMAP_MAX_CURVE_POINTS); int n = Math.max(32, Math.min(128, mx == null ? 64 : mx)); float[] p = new float[n * 2];
         for (int i = 0; i < n; i++) { float x = i / (float) (n - 1); p[2 * i] = x; p[2 * i + 1] = (float) (0.075 + 0.86 * Math.log1p(38 * x) / Math.log1p(38)); }
         return new TonemapCurve(p, p.clone(), p.clone());
     }
@@ -390,14 +400,15 @@ public class CinemaActivity extends Activity {
     void startRecording() {
         if (session == null || recording) return;
         try {
-            String name = "MoonCam_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + "_" + profName(profile).replace(" ", "") + ".mp4";
+            String name = "MoonCam_" + clipName() + "_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + "_" + profName(profile).replace(" ", "") + ".mp4";
             ContentValues cv = new ContentValues();
             cv.put(MediaStore.Video.Media.DISPLAY_NAME, name); cv.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
             cv.put(MediaStore.Video.Media.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/MoonCam"); cv.put(MediaStore.Video.Media.IS_PENDING, 1);
             outUri = getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, cv);
             pfd = getContentResolver().openFileDescriptor(outUri, "w");
             boolean audio = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
-            mr = buildRecorder(null, pfd.getFileDescriptor(), audio); mr.prepare();
+            try { mr = buildRecorder(null, pfd.getFileDescriptor(), audio, 2); mr.prepare(); }
+            catch (Exception stereo) { try { mr.release(); } catch (Exception ignored) {} mr = buildRecorder(null, pfd.getFileDescriptor(), audio, 1); mr.prepare(); }
             recording = true; updateRepeating(); mr.start();
             recStart = SystemClock.elapsedRealtime(); hidePanel(); refreshUi(); ui.post(tick);
         } catch (Exception e) {
@@ -414,7 +425,7 @@ public class CinemaActivity extends Activity {
         try { mr.release(); } catch (Exception ignored) {} mr = null;
         try { if (pfd != null) pfd.close(); } catch (Exception ignored) {} pfd = null;
         try {
-            if (ok) { ContentValues cv = new ContentValues(); cv.put(MediaStore.Video.Media.IS_PENDING, 0); getContentResolver().update(outUri, cv, null, null); toast("บันทึกแล้ว · Movies/MoonCam"); }
+            if (ok) { ContentValues cv = new ContentValues(); cv.put(MediaStore.Video.Media.IS_PENDING, 0); getContentResolver().update(outUri, cv, null, null); toast("บันทึก " + clipName() + " · Movies/MoonCam"); sp.edit().putInt("clip", sp.getInt("clip", 1) + 1).apply(); }
             else { getContentResolver().delete(outUri, null, null); toast("คลิปสั้นเกินไป ไม่ได้บันทึก"); }
         } catch (Exception ignored) {}
         updateRepeating(); refreshUi(); meter.setProgress(0);
@@ -471,50 +482,49 @@ public class CinemaActivity extends Activity {
             return true;
         });
 
-        // top bar of chips
-        HorizontalScrollView hs = new HorizontalScrollView(this); hs.setHorizontalScrollBarEnabled(false);
-        bar = new LinearLayout(this); bar.setOrientation(LinearLayout.HORIZONTAL); bar.setGravity(Gravity.CENTER_VERTICAL); bar.setPadding(dp(8), dp(4), dp(8), dp(4));
-        hs.addView(bar); hs.setBackgroundColor(0x99000000);
-        root.addView(hs, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP));
-        addChip("✕", "ออก", v -> { if (recording) stopRecording(); finish(); });
-        addChip("EXPOSURE", "exp", v -> toggleManual());
-        addChip("ISO", "iso", v -> openPanel("iso"));
-        addChip("SHUTTER", "sh", v -> openPanel("sh"));
-        addChip("IRIS", "ap", v -> cycleAperture());
-        addChip("EV", "ev", v -> openPanel("ev"));
-        addChip("WB", "wb", v -> { if (recording) return; wbIdx = (wbIdx + 1) % WB_MODES.length; awbLock = false; updateRepeating(); refreshChips(); });
-        addChip("FOCUS", "af", v -> openPanel("af"));
-        addChip("LUT", "lut", v -> openStrip("lut"));
-        addChip("TOOLS", "tools", v -> openStrip("tools"));
-        addChip("FPS", "fps", v -> cycleConfig("fps"));
-        addChip("RES", "res", v -> cycleConfig("res"));
-        addChip("PROFILE", "prof", v -> cycleConfig("prof"));
-        addChip("STAB", "stab", v -> { stab = !stab; savePrefs(); updateRepeating(); refreshChips(); });
-        addChip("GUIDE", "guide", v -> { guide = (guide + 1) % GUIDES.length; savePrefs(); guides.invalidate(); refreshChips(); });
+        // ---------------- ARRI-style status bars
+        bar = bar(Gravity.TOP);
+        addChip(bar, "", "exit", v -> { if (recording) stopRecording(); finish(); }, 0);
+        addChip(bar, "AE", "exp", v -> toggleManual(), 1);
+        addChip(bar, "FPS", "fps", v -> cycleConfig("fps"), 1);
+        addChip(bar, "SHUTTER", "sh", v -> openPanel("sh"), 1);
+        addChip(bar, "EI / ISO", "iso", v -> openPanel("iso"), 1);
+        addChip(bar, "IRIS", "ap", v -> cycleAperture(), 1);
+        addChip(bar, "WB", "wb", v -> { if (recording) return; wbIdx = (wbIdx + 1) % WB_MODES.length; awbLock = false; updateRepeating(); refreshChips(); }, 1);
+        addChip(bar, "EV", "ev", v -> openPanel("ev"), 1);
+        addChip(bar, "FOCUS", "af", v -> openPanel("af"), 1);
+        addChip(bar, "LOOK", "lut", v -> openStrip("lut"), 1);
+        addChip(bar, "COLOR", "prof", v -> cycleConfig("prof"), 1);
+        addChip(bar, "RES", "res", v -> cycleConfig("res"), 1);
 
-        // record button
+        bot = bar(Gravity.BOTTOM);
+        LinearLayout tcBox = new LinearLayout(this); tcBox.setGravity(Gravity.CENTER_VERTICAL); tcBox.setPadding(dp(14), 0, dp(14), 0);
+        recDot = new TextView(this); recDot.setText("● "); recDot.setTextColor(RED); recDot.setTextSize(13); recDot.setAlpha(.25f);
+        tc = new TextView(this); tc.setText("00:00:00:00"); tc.setTextColor(WHITE); tc.setTextSize(21); tc.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
+        tcBox.addView(recDot); tcBox.addView(tc); this.tcBox = tcBox;
+        bot.addView(tcBox, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        clipTv = statusText(bot, 15, true); info = statusText(bot, 12, false); batTv = statusText(bot, 12, false);
+        FrameLayout mw = new FrameLayout(this); mw.setPadding(dp(12), 0, dp(12), 0);
+        meter = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); meter.setMax(100); meter.setProgressTintList(android.content.res.ColorStateList.valueOf(0xFF5BD06A));
+        mw.addView(meter, new FrameLayout.LayoutParams(dp(96), dp(6), Gravity.CENTER_VERTICAL)); divider(bot); bot.addView(mw, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        addChip(bot, "QUALITY", "q", v -> cycleQuality(), 1);
+        addChip(bot, "SCOPE", "scope", v -> cycleScope(), 1);
+        addChip(bot, "TOOLS", "tools", v -> openStrip("tools"), 1);
+        addChip(bot, "GUIDE", "guide", v -> { guide = (guide + 1) % GUIDES.length; savePrefs(); guides.invalidate(); refreshChips(); }, 1);
+        addChip(bot, "STAB", "stab", v -> { stab = !stab; savePrefs(); updateRepeating(); refreshChips(); }, 1);
+
+        // record button + lenses (right gutter) · scope (left gutter)
         recBtn = new FrameLayout(this);
-        GradientDrawable ring = new GradientDrawable(); ring.setShape(GradientDrawable.OVAL); ring.setStroke(dp(4), INK); recBtn.setBackground(ring);
+        GradientDrawable ring = new GradientDrawable(); ring.setShape(GradientDrawable.OVAL); ring.setStroke(dp(3), 0xFFE8E8E8); ring.setColor(0x66000000); recBtn.setBackground(ring);
         recInner = new View(this); GradientDrawable in = new GradientDrawable(); in.setShape(GradientDrawable.OVAL); in.setColor(RED); recInner.setBackground(in);
-        recBtn.addView(recInner, new FrameLayout.LayoutParams(dp(54), dp(54), Gravity.CENTER));
-        FrameLayout.LayoutParams rl = new FrameLayout.LayoutParams(dp(76), dp(76), Gravity.END | Gravity.CENTER_VERTICAL); rl.setMarginEnd(dp(18));
+        recBtn.addView(recInner, new FrameLayout.LayoutParams(dp(58), dp(58), Gravity.CENTER));
+        FrameLayout.LayoutParams rl = new FrameLayout.LayoutParams(dp(80), dp(80), Gravity.END | Gravity.CENTER_VERTICAL); rl.setMarginEnd(dp(20));
         root.addView(recBtn, rl); recBtn.setOnClickListener(v -> toggleRec());
         lensCol = new LinearLayout(this); lensCol.setOrientation(LinearLayout.VERTICAL); lensCol.setGravity(Gravity.CENTER);
-        FrameLayout.LayoutParams ll = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END | Gravity.CENTER_VERTICAL); ll.setMarginEnd(dp(108));
+        FrameLayout.LayoutParams ll = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END | Gravity.CENTER_VERTICAL); ll.setMarginEnd(dp(114));
         root.addView(lensCol, ll); renderLenses();
-
-        // timecode + meter (bottom left)
-        LinearLayout bl = new LinearLayout(this); bl.setOrientation(LinearLayout.VERTICAL); bl.setPadding(dp(14), dp(8), dp(14), dp(8));
-        GradientDrawable bbg = new GradientDrawable(); bbg.setColor(PANEL); bbg.setCornerRadius(dp(12)); bl.setBackground(bbg);
-        LinearLayout tcRow = new LinearLayout(this); tcRow.setGravity(Gravity.CENTER_VERTICAL);
-        recDot = new TextView(this); recDot.setText("● "); recDot.setTextColor(RED); recDot.setTextSize(14); recDot.setAlpha(.25f);
-        tc = new TextView(this); tc.setText("00:00:00:00"); tc.setTextColor(INK); tc.setTextSize(20); tc.setTypeface(Typeface.MONOSPACE, Typeface.BOLD);
-        tcRow.addView(recDot); tcRow.addView(tc); bl.addView(tcRow);
-        meter = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); meter.setMax(100); meter.setProgressTintList(android.content.res.ColorStateList.valueOf(0xFF5BD06A));
-        bl.addView(meter, new LinearLayout.LayoutParams(dp(170), dp(6)));
-        info = new TextView(this); info.setTextColor(MUTED); info.setTextSize(11); info.setTypeface(Typeface.MONOSPACE); bl.addView(info);
-        FrameLayout.LayoutParams bll = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.START);
-        bll.setMargins(dp(14), 0, 0, dp(14)); root.addView(bl, bll);
+        scope = new ScopeView(this); root.addView(scope, new FrameLayout.LayoutParams(dp(200), dp(124), Gravity.START | Gravity.CENTER_VERTICAL)); scope.setVisibility(View.GONE);
+        lp.scopeSink = (px, w, h) -> { if (scopeMode > 0) scope.update(px, w, h); };
 
         // slider panel (bottom centre): label · − · slider · + · [AUTO | MANUAL]
         panel = new LinearLayout(this); panel.setOrientation(LinearLayout.HORIZONTAL); panel.setGravity(Gravity.CENTER_VERTICAL); panel.setPadding(dp(14), dp(6), dp(8), dp(6));
@@ -529,7 +539,7 @@ public class CinemaActivity extends Activity {
         LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)); sl.setMarginStart(dp(10)); panel.addView(segAuto, sl);
         LinearLayout.LayoutParams sm = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)); sm.setMarginStart(dp(4)); panel.addView(segManual, sm);
         FrameLayout.LayoutParams pl = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        pl.bottomMargin = dp(14); root.addView(panel, pl); panel.setVisibility(View.GONE);
+        pl.bottomMargin = dp(BOTBAR + 10); root.addView(panel, pl); panel.setVisibility(View.GONE);
         panelSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar sb, int p, boolean user) { if (user) panelChanged(p); }
             @Override public void onStartTrackingTouch(SeekBar sb) {}
@@ -543,25 +553,90 @@ public class CinemaActivity extends Activity {
         strip = new LinearLayout(this); strip.setOrientation(LinearLayout.HORIZONTAL); strip.setPadding(dp(8), dp(6), dp(8), dp(6)); stripWrap.addView(strip);
         GradientDrawable sbg = new GradientDrawable(); sbg.setColor(PANEL); sbg.setCornerRadius(dp(18)); stripWrap.setBackground(sbg);
         FrameLayout.LayoutParams swl = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        swl.bottomMargin = dp(14); swl.setMarginStart(dp(230)); swl.setMarginEnd(dp(100)); root.addView(stripWrap, swl); stripWrap.setVisibility(View.GONE);
+        swl.bottomMargin = dp(BOTBAR + 10); swl.setMarginStart(dp(60)); swl.setMarginEnd(dp(120)); root.addView(stripWrap, swl); stripWrap.setVisibility(View.GONE);
+        scope.mode = scopeMode; scope.setVisibility(scopeMode > 0 ? View.VISIBLE : View.GONE);
         setContentView(root);
         refreshUi();
     }
-    void addChip(String label, String key, View.OnClickListener l) {
-        LinearLayout c = new LinearLayout(this); c.setOrientation(LinearLayout.VERTICAL); c.setGravity(Gravity.CENTER); c.setPadding(dp(10), dp(4), dp(10), dp(4)); c.setMinimumWidth(dp(54));
-        TextView t = new TextView(this); t.setText(label); t.setTextColor(INK); t.setTextSize(11); t.setTypeface(Typeface.DEFAULT_BOLD); t.setGravity(Gravity.CENTER);
-        TextView v = new TextView(this); v.setTextColor(GOLD); v.setTextSize(10.5f); v.setTypeface(Typeface.MONOSPACE); v.setGravity(Gravity.CENTER); v.setTag(key);
-        c.addView(t); c.addView(v); c.setOnClickListener(l);
-        bar.addView(c); chips.add(new TextView[]{t, v});
+    // ---------------- status bar helpers (ARRI look: black bars, grey labels, white values, thin dividers)
+    LinearLayout bar(int gravity) {
+        LinearLayout b = new LinearLayout(this); b.setOrientation(LinearLayout.HORIZONTAL); b.setGravity(Gravity.CENTER_VERTICAL); b.setBackgroundColor(BAR);
+        FrameLayout.LayoutParams p = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(gravity == Gravity.TOP ? TOPBAR : BOTBAR), gravity);
+        root.addView(b, p); return b;
+    }
+    void divider(LinearLayout parent) { View d = new View(this); d.setBackgroundColor(0x2EFFFFFF); parent.addView(d, new LinearLayout.LayoutParams(dp(1), ViewGroup.LayoutParams.MATCH_PARENT)); }
+    TextView statusText(LinearLayout parent, float size, boolean bold) {
+        divider(parent); TextView t = new TextView(this); t.setTextColor(bold ? WHITE : LABEL); t.setTextSize(size); t.setGravity(Gravity.CENTER); t.setPadding(dp(12), 0, dp(12), 0);
+        t.setTypeface(Typeface.create("sans-serif-condensed", bold ? Typeface.BOLD : Typeface.NORMAL)); t.setSingleLine(true);
+        parent.addView(t, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT)); return t;
+    }
+    void addChip(LinearLayout parent, String label, String key, View.OnClickListener l, float weight) {
+        if (parent.getChildCount() > 0) divider(parent);
+        LinearLayout c = new LinearLayout(this); c.setOrientation(LinearLayout.VERTICAL); c.setGravity(Gravity.CENTER); c.setPadding(dp(4), 0, dp(4), 0);
+        TextView t = new TextView(this); t.setText(label); t.setTextColor(LABEL); t.setTextSize(9.5f); t.setLetterSpacing(.08f); t.setGravity(Gravity.CENTER); t.setSingleLine(true);
+        t.setTypeface(Typeface.create("sans-serif-condensed", Typeface.NORMAL));
+        TextView v = new TextView(this); v.setTextColor(WHITE); v.setTextSize(key.equals("exit") ? 20 : 15.5f); v.setGravity(Gravity.CENTER); v.setTag(key); v.setSingleLine(true);
+        v.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD));
+        if (!label.isEmpty()) c.addView(t); c.addView(v); c.setOnClickListener(l);
+        parent.addView(c, weight > 0 ? new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, weight) : new LinearLayout.LayoutParams(dp(52), ViewGroup.LayoutParams.MATCH_PARENT));
+        chips.add(new TextView[]{t, v});
     }
     void refreshUi() { refreshChips(); recInnerShape(); }
     void recInnerShape() {
         if (recInner == null) return;
         GradientDrawable in = new GradientDrawable(); in.setColor(RED);
         if (recording) { in.setShape(GradientDrawable.RECTANGLE); in.setCornerRadius(dp(6)); recInner.setLayoutParams(new FrameLayout.LayoutParams(dp(30), dp(30), Gravity.CENTER)); }
-        else { in.setShape(GradientDrawable.OVAL); recInner.setLayoutParams(new FrameLayout.LayoutParams(dp(54), dp(54), Gravity.CENTER)); }
+        else { in.setShape(GradientDrawable.OVAL); recInner.setLayoutParams(new FrameLayout.LayoutParams(dp(58), dp(58), Gravity.CENTER)); }
         recInner.setBackground(in);
         recDot.setAlpha(recording ? 1f : .25f);
+        if (tcBox != null) tcBox.setBackgroundColor(recording ? 0xFFB3201B : 0x00000000);
+        if (guides != null) { guides.rec = recording; guides.invalidate(); }
+    }
+    String clipName() { return String.format(Locale.US, "A001C%03d", sp.getInt("clip", 1)); }
+    void cycleQuality() {
+        if (recording) { toast("หยุดบันทึกก่อนเปลี่ยน"); return; }
+        quality = (quality + 1) % 3; sp.edit().putInt("quality", quality).apply();
+        toast(quality == 2 ? "MAX — บิตเรตสูงสุด HEVC · ปิดการเร่งความคม ลด NR ของกล้อง (ภาพดิบเหมาะเกรด ไฟล์ใหญ่)" : quality == 1 ? "HIGH — HEVC บิตเรตสูง สมดุลคุณภาพ/ขนาดไฟล์" : "STD — H.264 ไฟล์เล็ก เปิดได้ทุกที่");
+        updateRepeating(); refreshChips();
+    }
+    void cycleScope() {
+        scopeMode = (scopeMode + 1) % 4; sp.edit().putInt("scope", scopeMode).apply();
+        scope.mode = scopeMode; scope.setVisibility(scopeMode > 0 ? View.VISIBLE : View.GONE); layoutPreview(); refreshChips();
+    }
+
+    /** Waveform / RGB parade / histogram from a small GPU read-back of the picture you see (LUT included). */
+    class ScopeView extends View {
+        int mode = 0; byte[] px; int pw, ph; final android.graphics.Bitmap bmp = android.graphics.Bitmap.createBitmap(128, 100, android.graphics.Bitmap.Config.ARGB_8888);
+        final int[] buf = new int[128 * 100]; final Paint p = new Paint(Paint.FILTER_BITMAP_FLAG), grid = new Paint(), txt = new Paint(Paint.ANTI_ALIAS_FLAG);
+        final Rect src = new Rect(0, 0, 128, 100); final RectF dst = new RectF();
+        ScopeView(Context c) { super(c); grid.setColor(0x40FFFFFF); grid.setStrokeWidth(1); txt.setColor(LABEL); txt.setTextSize(dp(9)); txt.setTypeface(Typeface.create("sans-serif-condensed", Typeface.NORMAL)); }
+        void update(byte[] d, int w, int h) { px = d; pw = w; ph = h; build(); postInvalidate(); }
+        void build() {
+            if (px == null) return; java.util.Arrays.fill(buf, 0);
+            int[] acc = new int[128 * 100 * 3];
+            if (mode == 3) {
+                int[][] hist = new int[4][128]; int mx = 1;
+                for (int i = 0; i < pw * ph; i++) { int r = px[i * 4] & 255, g = px[i * 4 + 1] & 255, b = px[i * 4 + 2] & 255, y = (r * 54 + g * 183 + b * 19) >> 8; hist[0][r >> 1]++; hist[1][g >> 1]++; hist[2][b >> 1]++; hist[3][y >> 1]++; }
+                for (int c = 0; c < 4; c++) for (int x = 0; x < 128; x++) mx = Math.max(mx, hist[c][x]);
+                for (int x = 0; x < 128; x++) for (int c = 0; c < 4; c++) { int hgt = (int) (Math.sqrt(hist[c][x] / (double) mx) * 99); for (int y = 99; y > 99 - hgt; y--) { int k = (y * 128 + x) * 3; if (c == 3) { acc[k] += 60; acc[k + 1] += 60; acc[k + 2] += 60; } else acc[k + c] += 110; } }
+            } else {
+                for (int y = 0; y < ph; y++) for (int x = 0; x < pw; x++) {
+                    int i = (y * pw + x) * 4, r = px[i] & 255, g = px[i + 1] & 255, b = px[i + 2] & 255;
+                    if (mode == 1) { int l = (r * 54 + g * 183 + b * 19) >> 8, col = x * 128 / pw, row = 99 - l * 99 / 255, k = (row * 128 + col) * 3; acc[k] += 28; acc[k + 1] += 40; acc[k + 2] += 28; }
+                    else { int col = x * 42 / pw; int[] v = {r, g, b}; for (int c = 0; c < 3; c++) { int row = 99 - v[c] * 99 / 255, k = (row * 128 + c * 43 + col) * 3; acc[k + c] += 70; } }
+                }
+            }
+            for (int i = 0; i < buf.length; i++) { int r = Math.min(255, acc[i * 3]), g = Math.min(255, acc[i * 3 + 1]), b = Math.min(255, acc[i * 3 + 2]); buf[i] = (r | g | b) == 0 ? 0 : 0xFF000000 | (r << 16) | (g << 8) | b; }
+            bmp.setPixels(buf, 0, 128, 0, 0, 128, 100);
+        }
+        @Override protected void onDraw(Canvas c) {
+            int w = getWidth(), h = getHeight(); c.drawColor(0xCC0B0C0E);
+            float top = dp(14), bh = h - top - dp(4); dst.set(dp(4), top, w - dp(4), top + bh);
+            for (int i = 0; i <= 4; i++) { float y = top + bh * i / 4f; c.drawLine(dst.left, y, dst.right, y, grid); }
+            if (px != null) c.drawBitmap(bmp, src, dst, p);
+            c.drawText(mode == 1 ? "WAVEFORM" : mode == 2 ? "RGB PARADE" : "HISTOGRAM", dp(6), dp(11), txt);
+            if (mode != 3) { c.drawText("100", w - dp(22), top + dp(8), txt); c.drawText("50", w - dp(16), top + bh / 2 + dp(3), txt); c.drawText("0", w - dp(10), top + bh, txt); }
+        }
     }
     void refreshChips() {
         for (TextView[] c : chips) {
@@ -576,25 +651,32 @@ public class CinemaActivity extends Activity {
                 case "af": v = manualFocus ? (focusDist <= 0.01f ? "MF ∞" : String.format(Locale.US, "MF %.1fm", 1 / focusDist)) : afLock ? "AF 🔒" : "AF"; mode = manualFocus || afLock ? 2 : 1; break;
                 case "lut": v = lutIdx < 0 ? "ปิด" : lutIdx == 100 ? (customName == null ? "ของฉัน" : customName) : Luts.NAMES[lutIdx]; mode = lutIdx < 0 ? 0 : 2; break;
                 case "tools": v = (zebra ? "Z " : "") + (falseColor ? "FC " : "") + (peaking ? "PK" : ""); if (v.isEmpty()) v = "—"; break;
-                case "fps": v = fps + "p"; break;
+                case "exit": v = "✕"; break;
+                case "q": v = quality == 2 ? "MAX" : quality == 1 ? "HIGH" : "STD"; mode = quality > 0 ? 2 : 0; break;
+                case "scope": v = scopeMode == 1 ? "WAVE" : scopeMode == 2 ? "PARADE" : scopeMode == 3 ? "HIST" : "OFF"; break;
+                case "fps": v = fps + ""; break;
                 case "res": v = "4K".equals(res) ? "4K" : res + "p"; break;
                 case "prof": v = profName(profile); mode = "natural".equals(profile) ? 0 : 2; break;
                 case "stab": v = stab ? "ON" : "OFF"; break;
                 case "guide": v = GUIDES[guide]; break;
                 default: v = "";
             }
-            c[1].setText((mode == 1 ? "A · " : mode == 2 && (k.equals("iso") || k.equals("sh")) ? "M · " : "") + v);
-            c[1].setTextColor(mode == 2 ? 0xFF1B1408 : mode == 1 ? INK : GOLD);
-            View box = (View) c[0].getParent();
-            if (mode == 2) { GradientDrawable g = new GradientDrawable(); g.setColor(GOLD); g.setCornerRadius(dp(10)); box.setBackground(g); c[0].setTextColor(0xFF1B1408); }
-            else { box.setBackground(null); c[0].setTextColor(INK); }
-            boolean locked = recording && (k.equals("fps") || k.equals("res") || k.equals("prof"));
+            boolean sel = k.equals(panelKey) || k.equals(stripMode);
+            c[1].setText((mode == 1 && !k.equals("exp") ? "A " : "") + v);
+            c[1].setTextColor(k.equals("exp") ? (manualExp ? WHITE : AUTOC) : mode == 1 ? AUTOC : (mode == 2 && (k.equals("lut") || k.equals("prof") || k.equals("q"))) ? AMBER : WHITE);
+            View box = (View) c[1].getParent();
+            box.setBackgroundColor(sel ? 0xFF2A2C31 : 0x00000000);
+            c[0].setTextColor(sel ? WHITE : LABEL);
+            boolean locked = recording && (k.equals("fps") || k.equals("res") || k.equals("prof") || k.equals("q"));
             box.setAlpha(locked ? .35f : 1f);
         }
         if (info != null) {
             long secs = -1;
             try { StatFs s = new StatFs(Environment.getExternalStorageDirectory().getPath()); secs = s.getAvailableBytes() / (bitrate() / 8 + 24_000); } catch (Exception ignored) {}
-            info.setText(("4K".equals(res) ? "2160p" : res + "p") + " · " + fps + " · " + profName(profile) + " · " + (bitrate() / 1_000_000) + "M" + (secs < 0 ? "" : String.format(Locale.US, " · %dh%02dm", secs / 3600, secs / 60 % 60)));
+            info.setText((useHevc() ? ("hlg10".equals(profile) ? "HEVC 10-bit" : "HEVC") : "H.264") + " · " + (bitrate() / 1_000_000) + " Mb/s" + (secs < 0 ? "" : String.format(Locale.US, " · %dh%02dm", secs / 3600, secs / 60 % 60)));
+            if (clipTv != null) clipTv.setText(clipName());
+            long now = SystemClock.elapsedRealtime();
+            if (batTv != null && now - batAt > 5000) { batAt = now; try { Intent bi = registerReceiver(null, new android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED)); if (bi != null) { int lv = bi.getIntExtra("level", -1), sc = bi.getIntExtra("scale", 100), tp = bi.getIntExtra("temperature", 0); batTxt = Math.round(lv * 100f / sc) + "% · " + Math.round(tp / 10f) + "°C"; } } catch (Exception ignored) {} batTv.setText(batTxt); }
         }
     }
 
@@ -802,9 +884,11 @@ public class CinemaActivity extends Activity {
     int previewRotation() { int r = displayDegrees(); return (r == 90 ? 90 : r == 270 ? -90 : r == 180 ? 180 : 0) + rotOffset; }
     void layoutPreview() {
         int W = root.getWidth(), H = root.getHeight(); if (W == 0 || H == 0) { root.post(this::layoutPreview); return; }
-        int w = W, h = W * 9 / 16; if (h > H) { h = H; w = H * 16 / 9; }
-        gv.setLayoutParams(new FrameLayout.LayoutParams(w, h, Gravity.CENTER));
-        guides.setLayoutParams(new FrameLayout.LayoutParams(w, h, Gravity.CENTER));
+        int top = dp(TOPBAR), avail = H - top - dp(BOTBAR), aw = W - dp(240);
+        int w = aw, h = aw * 9 / 16; if (h > avail) { h = avail; w = avail * 16 / 9; }
+        FrameLayout.LayoutParams g1 = new FrameLayout.LayoutParams(w, h, Gravity.TOP | Gravity.CENTER_HORIZONTAL); g1.topMargin = top + (avail - h) / 2; gv.setLayoutParams(g1);
+        FrameLayout.LayoutParams g2 = new FrameLayout.LayoutParams(w, h, Gravity.TOP | Gravity.CENTER_HORIZONTAL); g2.topMargin = g1.topMargin; guides.setLayoutParams(g2);
+        if (scope != null) { int gut = (W - w) / 2 - dp(16); int sw = Math.max(dp(150), Math.min(dp(230), gut)); FrameLayout.LayoutParams sp2 = new FrameLayout.LayoutParams(sw, sw * 62 / 100, Gravity.START | Gravity.CENTER_VERTICAL); sp2.setMarginStart(dp(8)); scope.setLayoutParams(sp2); }
         if (lp != null) { lp.rotationDeg = previewRotation(); gv.requestRender(); }
         applyLut();
     }
@@ -813,7 +897,7 @@ public class CinemaActivity extends Activity {
     /** Frame guides, grid and the focus / exposure square drawn over the preview. */
     class GuideView extends View {
         final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG), shade = new Paint(), gold = new Paint(Paint.ANTI_ALIAS_FLAG), text = new Paint(Paint.ANTI_ALIAS_FLAG);
-        float fx = -1, fy = -1; long ft = 0; String sun = ""; boolean lock = false;
+        float fx = -1, fy = -1; long ft = 0; String sun = ""; boolean lock = false, rec = false; final Paint tally = new Paint();
         GuideView(Context c) {
             super(c); line.setColor(0x66FFFFFF); line.setStrokeWidth(dp(1)); shade.setColor(0x88000000);
             gold.setColor(GOLD); gold.setStyle(Paint.Style.STROKE); gold.setStrokeWidth(dp(1.8f));
@@ -829,6 +913,7 @@ public class CinemaActivity extends Activity {
             float r = guide == 2 ? 2.39f : guide == 3 ? 1.85f : 0;
             if (r > 0) { float bh = (h - w / r) / 2; c.drawRect(0, 0, w, bh, shade); c.drawRect(0, h - bh, w, h, shade); c.drawLine(0, bh, w, bh, gold); c.drawLine(0, h - bh, w, h - bh, gold); }
             if (guide == 4) { float bw = h * 9f / 16f, x0 = (w - bw) / 2; c.drawRect(0, 0, x0, h, shade); c.drawRect(x0 + bw, 0, w, h, shade); c.drawRect(x0, 0, x0 + bw, h, gold); }
+            if (rec) { tally.setColor(0xFFE0302A); tally.setStyle(Paint.Style.STROKE); tally.setStrokeWidth(dp(4)); c.drawRect(dp(2), dp(2), w - dp(2), h - dp(2), tally); }
             if (showing()) {
                 float s = dp(38); c.drawRect(fx - s, fy - s, fx + s, fy + s, gold);
                 float sx = fx + s + dp(10); c.drawLine(sx, fy - s, sx, fy + s, gold);
