@@ -4,7 +4,9 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.ContentValues;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.opengl.GLSurfaceView;
 import android.content.pm.PackageManager;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -86,7 +88,7 @@ public class CinemaActivity extends Activity {
 
     CameraManager cm; String camId; CameraCharacteristics ch; CameraDevice dev; CameraCaptureSession session;
     HandlerThread bgThread; Handler bg; final Handler ui = new Handler(Looper.getMainLooper());
-    TextureView tv; Surface previewSurface, recSurface; Size videoSize, previewSize;
+    GLSurfaceView gv; LutPreview lp; volatile SurfaceTexture camST; Surface previewSurface, recSurface; Size videoSize, previewSize;
     MediaRecorder mr; ParcelFileDescriptor pfd; Uri outUri; volatile boolean recording; long recStart;
     SharedPreferences sp;
 
@@ -104,10 +106,18 @@ public class CinemaActivity extends Activity {
     boolean capManual, cap10, capCurve; Range<Integer> isoRange; Range<Long> expRange; Range<Integer> evRange; float minFocus;
     final List<Integer> fpsList = new ArrayList<>(); final List<String> resList = new ArrayList<>(); final List<String> profList = new ArrayList<>();
     int liveIso = 0; long liveExp = 0; long lastUi = 0;
+    // v2: shutter as 1/x, aperture, AE/AF lock, LUT view assist, scopes
+    int shutterDen = 60; float[] apertures; int apIdx = 0; boolean aeLock = false, afLock = false;
+    int lutIdx = -1; float[] customLut; int customN = 33; String customName = null; int rotOffset = 0;
+    boolean zebra = false, peaking = false, falseColor = false;
+    LinearLayout strip; HorizontalScrollView stripWrap; String stripMode = null; TextView segAuto, segManual, minusBtn, plusBtn;
+    static final int[] ISO_STEPS = {50, 64, 80, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 2000, 2500, 3200, 4000, 5000, 6400, 8000, 10000, 12800};
+    static final int[] SH_STEPS = {24, 25, 30, 48, 50, 60, 96, 100, 120, 125, 180, 250, 500, 1000, 2000, 4000, 8000};
+    static final int REQ_LUT = 41;
     String mainId; List<Lens> lenses = new ArrayList<>(); int lensIdx = 0; float zoomRatio = 1f; Range<Float> zoomRange; LinearLayout lensCol;
 
     // UI
-    FrameLayout root; LinearLayout bar, panel; TextView tc, info, panelLabel, recDot; SeekBar panelSeek; Button panelAuto; FrameLayout recBtn; View recInner;
+    FrameLayout root; LinearLayout bar, panel; TextView tc, info, panelLabel, recDot; SeekBar panelSeek; FrameLayout recBtn; View recInner;
     ProgressBar meter; GuideView guides; String panelKey = null;
     final List<TextView[]> chips = new ArrayList<>();
 
@@ -118,6 +128,8 @@ public class CinemaActivity extends Activity {
         sp = getSharedPreferences("cinema", MODE_PRIVATE);
         fps = sp.getInt("fps", 30); res = sp.getString("res", "1080"); profile = sp.getString("profile", "natural");
         stab = sp.getBoolean("stab", true); guide = sp.getInt("guide", 1);
+        lutIdx = sp.getInt("lut", -1); rotOffset = sp.getInt("rotOffset", 0); shutterDen = sp.getInt("shutterDen", 0);
+        loadCustomLut();
         pickCamera();
         buildUi();
     }
@@ -127,19 +139,21 @@ public class CinemaActivity extends Activity {
         bgThread = new HandlerThread("cinema"); bgThread.start(); bg = new Handler(bgThread.getLooper());
         if (checkSelfPermission(Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED || checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, REQ_PERMS);
-        } else if (tv.isAvailable()) openCamera();
+        } else if (camST != null) openCamera();
+        if (gv != null) gv.onResume();
     }
 
     @Override protected void onPause() {
         if (recording) stopRecording();
         closeCamera();
         if (bgThread != null) { bgThread.quitSafely(); bgThread = null; bg = null; }
+        if (gv != null) gv.onPause();
         super.onPause();
     }
 
     @Override public void onRequestPermissionsResult(int code, String[] perms, int[] res) {
         if (code != REQ_PERMS) return;
-        if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) { if (tv.isAvailable()) openCamera(); }
+        if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) { if (camST != null) openCamera(); }
         else { toast("ต้องอนุญาตกล้องก่อน"); finish(); }
     }
 
@@ -183,6 +197,7 @@ public class CinemaActivity extends Activity {
         Float mf = ch.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE); minFocus = mf == null ? 0 : mf;
         if (isoRange == null || expRange == null) capManual = false;
         if (capManual) iso = Math.max(isoRange.getLower(), Math.min(isoRange.getUpper(), 100));
+        apertures = ch.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES); if (apertures == null || apertures.length == 0) apertures = null; if (apertures != null && apIdx >= apertures.length) apIdx = 0;
 
         StreamConfigurationMap map = ch.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
         Size[] vs = map.getOutputSizes(MediaRecorder.class);
@@ -270,7 +285,9 @@ public class CinemaActivity extends Activity {
             if (session != null) { session.close(); session = null; }
             videoSize = chooseVideoSize(); previewSize = choosePreviewSize();
             ui.post(this::layoutPreview);
-            SurfaceTexture st = tv.getSurfaceTexture(); st.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
+            SurfaceTexture st = camST; if (st == null) return;
+            if (lp != null) { lp.bufW = previewSize.getWidth(); lp.bufH = previewSize.getHeight(); }
+            st.setDefaultBufferSize(previewSize.getWidth(), previewSize.getHeight());
             previewSurface = new Surface(st);
             if (recSurface != null) recSurface.release();
             recSurface = MediaCodec.createPersistentInputSurface();
@@ -330,16 +347,20 @@ public class CinemaActivity extends Activity {
         if (manualExp && capManual) {
             b.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_OFF);
             b.set(CaptureRequest.SENSOR_SENSITIVITY, iso);
-            long frame = 1_000_000_000L / fps, exp = Math.min(frame, (long) (angle / 360.0 * frame));
+            if (shutterDen < fps) shutterDen = defaultDen();
+            long frame = 1_000_000_000L / fps, exp = Math.min(frame, 1_000_000_000L / shutterDen);
             exp = Math.max(expRange.getLower(), Math.min(expRange.getUpper(), exp));
             b.set(CaptureRequest.SENSOR_EXPOSURE_TIME, exp); b.set(CaptureRequest.SENSOR_FRAME_DURATION, frame);
         } else {
             b.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON);
             b.set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, ev);
+            b.set(CaptureRequest.CONTROL_AE_LOCK, aeLock);
+            if (afRegions != null) b.set(CaptureRequest.CONTROL_AE_REGIONS, afRegions);
         }
+        if (apertures != null && apertures.length > 1) b.set(CaptureRequest.LENS_APERTURE, apertures[apIdx]);
         b.set(CaptureRequest.CONTROL_AWB_MODE, WB_MODES[wbIdx]); b.set(CaptureRequest.CONTROL_AWB_LOCK, awbLock);
         if (manualFocus && minFocus > 0) { b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_OFF); b.set(CaptureRequest.LENS_FOCUS_DISTANCE, focusDist); }
-        else { b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO); if (afRegions != null) b.set(CaptureRequest.CONTROL_AF_REGIONS, afRegions); }
+        else { b.set(CaptureRequest.CONTROL_AF_MODE, afLock ? CaptureRequest.CONTROL_AF_MODE_AUTO : CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_VIDEO); if (afRegions != null) b.set(CaptureRequest.CONTROL_AF_REGIONS, afRegions); }
         b.set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, stab ? CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_ON : CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE_OFF);
         if (zoomRange != null && Build.VERSION.SDK_INT >= 30) b.set(CaptureRequest.CONTROL_ZOOM_RATIO, Math.max(zoomRange.getLower(), Math.min(zoomRange.getUpper(), zoomRatio)));
         if ("log8".equals(profile) && capCurve) { b.set(CaptureRequest.TONEMAP_MODE, CaptureRequest.TONEMAP_MODE_CONTRAST_CURVE); b.set(CaptureRequest.TONEMAP_CURVE, logCurve()); }
@@ -411,29 +432,42 @@ public class CinemaActivity extends Activity {
     int dp(float v) { return Math.round(v * getResources().getDisplayMetrics().density); }
     void buildUi() {
         root = new FrameLayout(this); root.setBackgroundColor(Color.BLACK);
-        tv = new TextureView(this);
-        root.addView(tv, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER));
+        gv = new GLSurfaceView(this); gv.setEGLContextClientVersion(3); gv.setPreserveEGLContextOnPause(true);
+        lp = new LutPreview(gv, st -> { camST = st; if (dev != null && bg != null) bg.post(this::createSession); else if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) openCamera(); });
+        gv.setRenderer(lp); gv.setRenderMode(GLSurfaceView.RENDERMODE_WHEN_DIRTY);
+        lp.zebra = zebra; lp.peaking = peaking; lp.falseColor = falseColor;
+        root.addView(gv, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER));
         guides = new GuideView(this); root.addView(guides, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER));
-        tv.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
-            @Override public void onSurfaceTextureAvailable(SurfaceTexture s, int w, int h) { if (checkSelfPermission(Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) openCamera(); }
-            @Override public void onSurfaceTextureSizeChanged(SurfaceTexture s, int w, int h) { configureTransform(); }
-            @Override public boolean onSurfaceTextureDestroyed(SurfaceTexture s) { return true; }
-            @Override public void onSurfaceTextureUpdated(SurfaceTexture s) {}
-        });
-        final boolean[] scaled = {false};
+        // gestures: tap = focus + exposure point · drag up/down = brightness (EV in auto, ISO in manual) · long-press = AE/AF lock · pinch = zoom
+        final boolean[] st8 = {false, false, false}; // scaled, dragging, longPressed
+        final float[] down = {0, 0}; final int[] base = {0};
+        final Runnable longPress = () -> { st8[2] = true; lockAt(down[0], down[1], gv.getWidth(), gv.getHeight()); };
         final ScaleGestureDetector sg = new ScaleGestureDetector(this, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override public boolean onScale(ScaleGestureDetector d) {
-                if (zoomRange == null) return false; scaled[0] = true;
+                if (zoomRange == null) return false; st8[0] = true; ui.removeCallbacks(longPress);
                 zoomRatio = Math.max(zoomRange.getLower(), Math.min(Math.min(zoomRange.getUpper(), 10f), zoomRatio * d.getScaleFactor()));
-                // the lens button that matches the current zoom lights up
                 if (camId.equals(mainId)) { int best = lensIdx; for (int i = 0; i < lenses.size(); i++) { Lens l = lenses.get(i); if (l.zoom && zoomRatio >= l.ratio - 0.02f) best = i; } lensIdx = best; }
                 updateRepeating(); renderLenses(); return true;
             }
         });
-        tv.setOnTouchListener((v, e) -> {
+        gv.setOnTouchListener((v, e) -> {
             sg.onTouchEvent(e);
-            if (e.getActionMasked() == MotionEvent.ACTION_DOWN) scaled[0] = false;
-            if (e.getActionMasked() == MotionEvent.ACTION_UP && !scaled[0]) tapFocus(e.getX(), e.getY(), v.getWidth(), v.getHeight());
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN: st8[0] = false; st8[1] = false; st8[2] = false; down[0] = e.getX(); down[1] = e.getY(); base[0] = manualExp ? isoIndex() : ev; ui.postDelayed(longPress, 650); break;
+                case MotionEvent.ACTION_MOVE: {
+                    if (st8[0] || e.getPointerCount() > 1) break;
+                    float dy = down[1] - e.getY();
+                    if (!st8[1] && Math.abs(dy) > dp(14)) { st8[1] = true; ui.removeCallbacks(longPress); if (!guides.showing()) guides.focus(down[0], down[1]); }
+                    if (st8[1]) dragExposure(base[0], Math.round(dy / dp(26)));
+                    break;
+                }
+                case MotionEvent.ACTION_UP:
+                    ui.removeCallbacks(longPress);
+                    if (!st8[0] && !st8[1] && !st8[2]) tapFocus(e.getX(), e.getY(), v.getWidth(), v.getHeight());
+                    break;
+                case MotionEvent.ACTION_CANCEL: ui.removeCallbacks(longPress); break;
+                default: break;
+            }
             return true;
         });
 
@@ -443,11 +477,15 @@ public class CinemaActivity extends Activity {
         hs.addView(bar); hs.setBackgroundColor(0x99000000);
         root.addView(hs, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP));
         addChip("✕", "ออก", v -> { if (recording) stopRecording(); finish(); });
+        addChip("EXPOSURE", "exp", v -> toggleManual());
         addChip("ISO", "iso", v -> openPanel("iso"));
         addChip("SHUTTER", "sh", v -> openPanel("sh"));
+        addChip("IRIS", "ap", v -> cycleAperture());
         addChip("EV", "ev", v -> openPanel("ev"));
         addChip("WB", "wb", v -> { if (recording) return; wbIdx = (wbIdx + 1) % WB_MODES.length; awbLock = false; updateRepeating(); refreshChips(); });
         addChip("FOCUS", "af", v -> openPanel("af"));
+        addChip("LUT", "lut", v -> openStrip("lut"));
+        addChip("TOOLS", "tools", v -> openStrip("tools"));
         addChip("FPS", "fps", v -> cycleConfig("fps"));
         addChip("RES", "res", v -> cycleConfig("res"));
         addChip("PROFILE", "prof", v -> cycleConfig("prof"));
@@ -478,23 +516,34 @@ public class CinemaActivity extends Activity {
         FrameLayout.LayoutParams bll = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.START);
         bll.setMargins(dp(14), 0, 0, dp(14)); root.addView(bl, bll);
 
-        // slider panel (bottom centre)
+        // slider panel (bottom centre): label · − · slider · + · [AUTO | MANUAL]
         panel = new LinearLayout(this); panel.setOrientation(LinearLayout.HORIZONTAL); panel.setGravity(Gravity.CENTER_VERTICAL); panel.setPadding(dp(14), dp(6), dp(8), dp(6));
-        GradientDrawable pbg = new GradientDrawable(); pbg.setColor(PANEL); pbg.setCornerRadius(dp(16)); panel.setBackground(pbg);
-        panelLabel = new TextView(this); panelLabel.setTextColor(GOLD); panelLabel.setTextSize(13); panelLabel.setTypeface(Typeface.MONOSPACE, Typeface.BOLD); panelLabel.setMinWidth(dp(120));
+        GradientDrawable pbg = new GradientDrawable(); pbg.setColor(PANEL); pbg.setCornerRadius(dp(18)); panel.setBackground(pbg);
+        panelLabel = new TextView(this); panelLabel.setTextColor(GOLD); panelLabel.setTextSize(14); panelLabel.setTypeface(Typeface.MONOSPACE, Typeface.BOLD); panelLabel.setMinWidth(dp(132));
+        minusBtn = pill("−", false); plusBtn = pill("+", false);
         panelSeek = new SeekBar(this); panelSeek.setMax(1000);
         panelSeek.setProgressTintList(android.content.res.ColorStateList.valueOf(GOLD)); panelSeek.setThumbTintList(android.content.res.ColorStateList.valueOf(GOLD));
-        panelAuto = new Button(this); panelAuto.setText("AUTO"); panelAuto.setTextColor(0xFF1B1408); panelAuto.setAllCaps(false);
-        GradientDrawable ab = new GradientDrawable(); ab.setColor(GOLD); ab.setCornerRadius(dp(14)); panelAuto.setBackground(ab); panelAuto.setPadding(dp(12), 0, dp(12), 0);
-        panel.addView(panelLabel); panel.addView(panelSeek, new LinearLayout.LayoutParams(dp(260), ViewGroup.LayoutParams.WRAP_CONTENT)); panel.addView(panelAuto, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(34)));
+        segAuto = pill("AUTO", false); segManual = pill("MANUAL", false);
+        panel.addView(panelLabel); panel.addView(minusBtn, new LinearLayout.LayoutParams(dp(40), dp(36)));
+        panel.addView(panelSeek, new LinearLayout.LayoutParams(dp(230), ViewGroup.LayoutParams.WRAP_CONTENT)); panel.addView(plusBtn, new LinearLayout.LayoutParams(dp(40), dp(36)));
+        LinearLayout.LayoutParams sl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)); sl.setMarginStart(dp(10)); panel.addView(segAuto, sl);
+        LinearLayout.LayoutParams sm = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)); sm.setMarginStart(dp(4)); panel.addView(segManual, sm);
         FrameLayout.LayoutParams pl = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         pl.bottomMargin = dp(14); root.addView(panel, pl); panel.setVisibility(View.GONE);
         panelSeek.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar s, int p, boolean user) { if (user) panelChanged(p / 1000f); }
-            @Override public void onStartTrackingTouch(SeekBar s) {}
-            @Override public void onStopTrackingTouch(SeekBar s) {}
+            @Override public void onProgressChanged(SeekBar sb, int p, boolean user) { if (user) panelChanged(p); }
+            @Override public void onStartTrackingTouch(SeekBar sb) {}
+            @Override public void onStopTrackingTouch(SeekBar sb) {}
         });
-        panelAuto.setOnClickListener(v -> panelAutoPressed());
+        minusBtn.setOnClickListener(v -> { panelSeek.setProgress(Math.max(0, panelSeek.getProgress() - (panelSeek.getMax() > 100 ? 20 : 1))); panelChanged(panelSeek.getProgress()); });
+        plusBtn.setOnClickListener(v -> { panelSeek.setProgress(Math.min(panelSeek.getMax(), panelSeek.getProgress() + (panelSeek.getMax() > 100 ? 20 : 1))); panelChanged(panelSeek.getProgress()); });
+        segAuto.setOnClickListener(v -> panelMode(false)); segManual.setOnClickListener(v -> panelMode(true));
+        // option strip (LUT list / tools)
+        stripWrap = new HorizontalScrollView(this); stripWrap.setHorizontalScrollBarEnabled(false);
+        strip = new LinearLayout(this); strip.setOrientation(LinearLayout.HORIZONTAL); strip.setPadding(dp(8), dp(6), dp(8), dp(6)); stripWrap.addView(strip);
+        GradientDrawable sbg = new GradientDrawable(); sbg.setColor(PANEL); sbg.setCornerRadius(dp(18)); stripWrap.setBackground(sbg);
+        FrameLayout.LayoutParams swl = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        swl.bottomMargin = dp(14); swl.setMarginStart(dp(230)); swl.setMarginEnd(dp(100)); root.addView(stripWrap, swl); stripWrap.setVisibility(View.GONE);
         setContentView(root);
         refreshUi();
     }
@@ -516,137 +565,276 @@ public class CinemaActivity extends Activity {
     }
     void refreshChips() {
         for (TextView[] c : chips) {
-            String k = (String) c[1].getTag(); String v = "";
+            String k = (String) c[1].getTag(); String v; int mode = 0; // 0 neutral · 1 auto · 2 manual
             switch (k) {
-                case "iso": v = manualExp ? String.valueOf(iso) : (liveIso > 0 ? "A " + liveIso : "AUTO"); break;
-                case "sh": v = manualExp ? angle + "°" : (liveExp > 0 ? "A 1/" + Math.round(1e9 / liveExp) : "AUTO"); break;
-                case "ev": v = manualExp ? "—" : (ev > 0 ? "+" + ev : String.valueOf(ev)); break;
-                case "wb": v = WB_NAMES[wbIdx] + (awbLock ? "🔒" : ""); break;
-                case "af": v = manualFocus ? String.format(Locale.US, "MF %.1f", focusDist) : "AF"; break;
+                case "exp": v = manualExp ? "MANUAL" : "AUTO"; mode = manualExp ? 2 : 1; break;
+                case "iso": v = manualExp ? String.valueOf(iso) : (liveIso > 0 ? String.valueOf(liveIso) : "—"); mode = manualExp ? 2 : 1; break;
+                case "sh": v = manualExp ? "1/" + shutterDen : (liveExp > 0 ? "1/" + Math.round(1e9 / liveExp) : "—"); mode = manualExp ? 2 : 1; break;
+                case "ap": v = apertures == null ? "—" : String.format(Locale.US, "f/%.1f", apertures[apIdx]); mode = apertures != null && apertures.length > 1 ? 2 : 0; break;
+                case "ev": v = manualExp ? "—" : (ev > 0 ? "+" + ev : String.valueOf(ev)) + (aeLock ? " 🔒" : ""); mode = manualExp ? 0 : (ev != 0 || aeLock ? 2 : 1); break;
+                case "wb": v = WB_NAMES[wbIdx] + (awbLock ? "🔒" : ""); mode = wbIdx == 0 ? 1 : 2; break;
+                case "af": v = manualFocus ? (focusDist <= 0.01f ? "MF ∞" : String.format(Locale.US, "MF %.1fm", 1 / focusDist)) : afLock ? "AF 🔒" : "AF"; mode = manualFocus || afLock ? 2 : 1; break;
+                case "lut": v = lutIdx < 0 ? "ปิด" : lutIdx == 100 ? (customName == null ? "ของฉัน" : customName) : Luts.NAMES[lutIdx]; mode = lutIdx < 0 ? 0 : 2; break;
+                case "tools": v = (zebra ? "Z " : "") + (falseColor ? "FC " : "") + (peaking ? "PK" : ""); if (v.isEmpty()) v = "—"; break;
                 case "fps": v = fps + "p"; break;
                 case "res": v = "4K".equals(res) ? "4K" : res + "p"; break;
-                case "prof": v = profName(profile); break;
+                case "prof": v = profName(profile); mode = "natural".equals(profile) ? 0 : 2; break;
                 case "stab": v = stab ? "ON" : "OFF"; break;
                 case "guide": v = GUIDES[guide]; break;
                 default: v = "";
             }
-            c[1].setText(v);
+            c[1].setText((mode == 1 ? "A · " : mode == 2 && (k.equals("iso") || k.equals("sh")) ? "M · " : "") + v);
+            c[1].setTextColor(mode == 2 ? 0xFF1B1408 : mode == 1 ? INK : GOLD);
+            View box = (View) c[0].getParent();
+            if (mode == 2) { GradientDrawable g = new GradientDrawable(); g.setColor(GOLD); g.setCornerRadius(dp(10)); box.setBackground(g); c[0].setTextColor(0xFF1B1408); }
+            else { box.setBackground(null); c[0].setTextColor(INK); }
             boolean locked = recording && (k.equals("fps") || k.equals("res") || k.equals("prof"));
-            c[0].setAlpha(locked ? .35f : 1f); c[1].setAlpha(locked ? .35f : 1f);
+            box.setAlpha(locked ? .35f : 1f);
         }
         if (info != null) {
             long secs = -1;
             try { StatFs s = new StatFs(Environment.getExternalStorageDirectory().getPath()); secs = s.getAvailableBytes() / (bitrate() / 8 + 24_000); } catch (Exception ignored) {}
-            String left = secs < 0 ? "" : String.format(Locale.US, " · เหลือ %dh%02dm", secs / 3600, secs / 60 % 60);
-            info.setText(("4K".equals(res) ? "2160p" : res + "p") + " · " + fps + "fps · " + profName(profile) + " · " + (bitrate() / 1_000_000) + "Mbps" + left);
+            info.setText(("4K".equals(res) ? "2160p" : res + "p") + " · " + fps + " · " + profName(profile) + " · " + (bitrate() / 1_000_000) + "M" + (secs < 0 ? "" : String.format(Locale.US, " · %dh%02dm", secs / 3600, secs / 60 % 60)));
         }
     }
 
     // ---- config that needs a new session
     void cycleConfig(String k) {
         if (recording) { toast("หยุดบันทึกก่อนเปลี่ยน"); return; }
-        if (k.equals("fps")) fps = fpsList.get((fpsList.indexOf(fps) + 1) % fpsList.size());
+        if (k.equals("fps")) { fps = fpsList.get((fpsList.indexOf(fps) + 1) % fpsList.size()); shutterDen = defaultDen(); }
         if (k.equals("res")) res = resList.get((resList.indexOf(res) + 1) % resList.size());
         if (k.equals("prof")) {
             profile = profList.get((profList.indexOf(profile) + 1) % profList.size());
             if (profList.size() == 1) toast("เครื่องนี้มีแค่ Natural (ไม่รองรับ log curve / 10-bit)");
-            else toast("hlg10".equals(profile) ? "HLG 10-bit · HEVC — ภาพจะดูแบน ใช้ LUT แปลงตอนตัดต่อ" : "log8".equals(profile) ? "MoonLog — ยกเงา เก็บไฮไลต์ ภาพแบนไว้เกรดสี" : "Natural — สีปกติพร้อมใช้");
+            else toast("hlg10".equals(profile) ? "HLG 10-bit · HEVC — ภาพแบน เปิด LUT เพื่อพรีวิวสี" : "log8".equals(profile) ? "MoonLog — ภาพแบนไว้เกรดสี เปิด LUT เพื่อพรีวิวสี" : "Natural — สีปกติพร้อมใช้");
+            applyLut();
         }
         savePrefs(); refreshChips();
         if (bg != null) bg.post(this::createSession);
     }
-    void savePrefs() { sp.edit().putInt("fps", fps).putString("res", res).putString("profile", profile).putBoolean("stab", stab).putInt("guide", guide).apply(); }
+    void savePrefs() {
+        sp.edit().putInt("fps", fps).putString("res", res).putString("profile", profile).putBoolean("stab", stab).putInt("guide", guide)
+                .putInt("lut", lutIdx).putInt("rotOffset", rotOffset).putInt("shutterDen", shutterDen).apply();
+    }
+
+    // ---- exposure helpers
+    int defaultDen() { return snapDen(fps * 2); } // 180° shutter rule
+    int[] isoSteps() { List<Integer> l = new ArrayList<>(); if (isoRange != null) for (int v : ISO_STEPS) if (v >= isoRange.getLower() && v <= isoRange.getUpper()) l.add(v); if (l.isEmpty()) l.add(iso); int[] a = new int[l.size()]; for (int i = 0; i < a.length; i++) a[i] = l.get(i); return a; }
+    int[] shSteps() { List<Integer> l = new ArrayList<>(); for (int d : SH_STEPS) { if (d < fps) continue; long e = 1_000_000_000L / d; if (expRange != null && (e < expRange.getLower() || e > expRange.getUpper())) continue; l.add(d); } if (l.isEmpty()) l.add(fps); int[] a = new int[l.size()]; for (int i = 0; i < a.length; i++) a[i] = l.get(i); return a; }
+    static int nearest(int[] a, int v) { int best = 0; for (int i = 0; i < a.length; i++) if (Math.abs(a[i] - v) < Math.abs(a[best] - v)) best = i; return best; }
+    int snapIso(int v) { int[] a = isoSteps(); return a[nearest(a, v)]; }
+    int snapDen(int v) { int[] a = shSteps(); return a[nearest(a, v)]; }
+    int isoIndex() { return nearest(isoSteps(), iso); }
+    void toggleManual() {
+        if (!capManual) { toast("เครื่องนี้ไม่ให้แอปปรับ ISO/Shutter เอง — ใช้ EV หรือจิ้มแล้วลากขึ้นลงที่จอ"); return; }
+        manualExp = !manualExp;
+        if (manualExp) { if (liveIso > 0) iso = snapIso(liveIso); if (liveExp > 0) shutterDen = snapDen((int) Math.round(1e9 / liveExp)); if (shutterDen < fps) shutterDen = defaultDen(); aeLock = false; toast("MANUAL — ล็อก ISO / Shutter ตามค่าตอนนี้"); }
+        else toast("AUTO — กล้องปรับแสงเอง");
+        updateRepeating(); refreshChips(); if (panelKey != null) syncPanel();
+    }
+    void cycleAperture() {
+        if (apertures == null) { toast("เครื่องไม่บอกค่ารูรับแสง"); return; }
+        if (apertures.length < 2) { toast(String.format(Locale.US, "รูรับแสง f/%.1f เป็นค่าคงที่ของเลนส์นี้ — มือถือส่วนใหญ่ปรับไม่ได้ ใช้ Shutter / ISO / ND แทน", apertures[0])); return; }
+        apIdx = (apIdx + 1) % apertures.length; updateRepeating(); refreshChips();
+    }
+    /** drag up/down on the picture: EV in auto, ISO in manual */
+    void dragExposure(int base, int steps) {
+        if (manualExp) { int[] a = isoSteps(); int i = Math.max(0, Math.min(a.length - 1, base + steps)); if (a[i] != iso) { iso = a[i]; updateRepeating(); refreshChips(); } guides.sun = "ISO " + iso; }
+        else { if (evRange == null) return; int e = Math.max(evRange.getLower(), Math.min(evRange.getUpper(), base + steps)); if (e != ev) { ev = e; aeLock = false; updateRepeating(); refreshChips(); } guides.sun = "☀ " + (ev > 0 ? "+" : "") + ev; }
+        guides.keep(); if (panelKey != null) syncPanel();
+    }
 
     // ---- slider panel
+    TextView pill(String t, boolean on) {
+        TextView b = new TextView(this); b.setText(t); b.setGravity(Gravity.CENTER); b.setTextSize(12); b.setTypeface(Typeface.DEFAULT_BOLD); b.setPadding(dp(12), 0, dp(12), 0);
+        stylePill(b, on); return b;
+    }
+    void stylePill(TextView b, boolean on) {
+        GradientDrawable g = new GradientDrawable(); g.setCornerRadius(dp(16)); g.setColor(on ? GOLD : 0x22FFFFFF); if (!on) g.setStroke(dp(1), 0x44FFFFFF);
+        b.setBackground(g); b.setTextColor(on ? 0xFF1B1408 : INK);
+    }
     void openPanel(String k) {
-        if (k.equals("iso") || k.equals("sh")) { if (!capManual) { toast("เครื่องนี้ไม่ให้แอปปรับ ISO/Shutter เอง — ใช้ EV แทน"); return; } if (!manualExp) { manualExp = true; if (liveIso > 0) iso = clampIso(liveIso); updateRepeating(); } }
-        if (k.equals("ev") && manualExp) { toast("EV ใช้ได้ตอน ISO/Shutter เป็น AUTO"); return; }
+        hideStrip();
+        if ((k.equals("iso") || k.equals("sh")) && !capManual) { toast("เครื่องนี้ไม่ให้แอปปรับ ISO/Shutter เอง — ใช้ EV หรือจิ้มแล้วลากขึ้นลงที่จอ"); return; }
         if (k.equals("ev") && (evRange == null || evRange.getUpper() == 0)) { toast("เครื่องนี้ไม่รองรับ EV"); return; }
-        if (k.equals("af")) { if (minFocus <= 0) { toast("เครื่องนี้ไม่ให้โฟกัสเอง"); return; } manualFocus = true; updateRepeating(); }
+        if (k.equals("af") && minFocus <= 0) { toast("เครื่องนี้ไม่ให้โฟกัสเอง (Fixed focus)"); return; }
         if (k.equals(panelKey) && panel.getVisibility() == View.VISIBLE) { hidePanel(); return; }
         panelKey = k; panel.setVisibility(View.VISIBLE); syncPanel(); refreshChips();
     }
     void hidePanel() { if (panel != null) panel.setVisibility(View.GONE); panelKey = null; }
     int clampIso(int v) { return Math.max(isoRange.getLower(), Math.min(isoRange.getUpper(), v)); }
     void syncPanel() {
-        float t = 0;
+        if (panelKey == null) return;
+        boolean manual = false; segManual.setVisibility(View.VISIBLE); segAuto.setText("AUTO"); segManual.setText("MANUAL");
         switch (panelKey) {
-            case "iso": t = (float) (Math.log(iso / (double) isoRange.getLower()) / Math.log(isoRange.getUpper() / (double) isoRange.getLower())); panelLabel.setText("ISO " + iso); break;
-            case "sh": t = (angle - 11.25f) / (360 - 11.25f); panelLabel.setText(angle + "° · 1/" + Math.round(fps * 360.0 / angle)); break;
-            case "ev": t = (ev - evRange.getLower()) / (float) (evRange.getUpper() - evRange.getLower()); panelLabel.setText("EV " + (ev > 0 ? "+" : "") + ev); break;
-            case "af": t = 1 - focusDist / minFocus; panelLabel.setText(focusDist <= 0.01f ? "MF ∞" : String.format(Locale.US, "MF %.2fm", 1 / focusDist)); break;
+            case "iso": { int[] a = isoSteps(); panelSeek.setMax(a.length - 1); panelSeek.setProgress(nearest(a, manualExp ? iso : (liveIso > 0 ? liveIso : iso))); panelLabel.setText("ISO " + (manualExp ? iso : (liveIso > 0 ? liveIso : iso))); manual = manualExp; break; }
+            case "sh": { int[] a = shSteps(); int d = manualExp ? shutterDen : (liveExp > 0 ? (int) Math.round(1e9 / liveExp) : defaultDen()); panelSeek.setMax(a.length - 1); panelSeek.setProgress(nearest(a, d));
+                panelLabel.setText("1/" + d + " · " + Math.round(360.0 * fps / d) + "°"); manual = manualExp; break; }
+            case "ev": panelSeek.setMax(evRange.getUpper() - evRange.getLower()); panelSeek.setProgress(ev - evRange.getLower()); panelLabel.setText("EV " + (ev > 0 ? "+" : "") + ev + (aeLock ? " 🔒" : ""));
+                segAuto.setText("0"); segManual.setText(aeLock ? "ปลดล็อก" : "ล็อกแสง"); manual = aeLock; break;
+            case "af": panelSeek.setMax(1000); panelSeek.setProgress(Math.round((1 - focusDist / minFocus) * 1000));
+                panelLabel.setText(manualFocus ? (focusDist <= 0.01f ? "MF ∞" : String.format(Locale.US, "MF %.2fm", 1 / focusDist)) : "AF ต่อเนื่อง"); segAuto.setText("AF"); segManual.setText("MF"); manual = manualFocus; break;
         }
-        panelSeek.setProgress(Math.round(t * 1000));
+        stylePill(segAuto, !manual); stylePill(segManual, manual);
+        panelSeek.setAlpha((panelKey.equals("iso") || panelKey.equals("sh")) && !manualExp ? .45f : 1f);
     }
-    void panelChanged(float t) {
+    void panelChanged(int p) {
         switch (panelKey) {
-            case "iso": iso = clampIso((int) Math.round(isoRange.getLower() * Math.pow(isoRange.getUpper() / (double) isoRange.getLower(), t))); break;
-            case "sh": { int[] steps = {11, 22, 45, 90, 144, 172, 180, 270, 360}; int best = 180; float target = 11.25f + t * (360 - 11.25f), d = 1e9f; for (int s : steps) if (Math.abs(s - target) < d) { d = Math.abs(s - target); best = s; } angle = best; break; }
-            case "ev": ev = Math.round(evRange.getLower() + t * (evRange.getUpper() - evRange.getLower())); break;
-            case "af": focusDist = (1 - t) * minFocus; break;
+            case "iso": { if (!manualExp) toggleManualSilently(); int[] a = isoSteps(); iso = a[Math.max(0, Math.min(a.length - 1, p))]; break; }
+            case "sh": { if (!manualExp) toggleManualSilently(); int[] a = shSteps(); shutterDen = a[Math.max(0, Math.min(a.length - 1, p))]; break; }
+            case "ev": ev = evRange.getLower() + p; aeLock = false; break;
+            case "af": manualFocus = true; afLock = false; focusDist = (1 - p / 1000f) * minFocus; break;
+        }
+        syncPanel(); updateRepeating(); refreshChips(); savePrefs();
+    }
+    void toggleManualSilently() { manualExp = true; if (liveIso > 0) iso = snapIso(liveIso); if (liveExp > 0) shutterDen = snapDen((int) Math.round(1e9 / liveExp)); if (shutterDen < fps) shutterDen = defaultDen(); aeLock = false; }
+    void panelMode(boolean manual) {
+        switch (panelKey) {
+            case "iso": case "sh": if (manual != manualExp) toggleManual(); break;
+            case "ev": if (manual) { aeLock = !aeLock; toast(aeLock ? "ล็อกแสง (AE LOCK)" : "ปลดล็อกแสง"); } else { ev = 0; aeLock = false; } break;
+            case "af": if (manual) { manualFocus = true; afLock = false; } else { manualFocus = false; afLock = false; afRegions = null; } break;
         }
         syncPanel(); updateRepeating(); refreshChips();
     }
-    void panelAutoPressed() {
-        switch (panelKey) {
-            case "iso": case "sh": manualExp = false; break;
-            case "ev": ev = 0; break;
-            case "af": manualFocus = false; afRegions = null; break;
-        }
-        hidePanel(); updateRepeating(); refreshChips();
-    }
 
-    void tapFocus(float x, float y, int w, int h) {
-        if (panel.getVisibility() == View.VISIBLE) { hidePanel(); return; }
-        Rect a = ch.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE); if (a == null || session == null) return;
+    // ---- tap = focus + exposure point · long press = AE/AF lock
+    MeteringRectangle[] regionAt(float x, float y, int w, int h) {
+        Rect a = ch.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE); if (a == null) return null;
         float nx = x / w, ny = y / h; if (displayDegrees() == 270) { nx = 1 - nx; ny = 1 - ny; }
         int cx = (int) (nx * a.width()), cy = (int) (ny * a.height()), r = a.width() / 12;
-        afRegions = new MeteringRectangle[]{new MeteringRectangle(Math.max(0, cx - r), Math.max(0, cy - r), r * 2, r * 2, MeteringRectangle.METERING_WEIGHT_MAX - 1)};
-        manualFocus = false; guides.focus(x, y);
+        return new MeteringRectangle[]{new MeteringRectangle(Math.max(0, cx - r), Math.max(0, cy - r), r * 2, r * 2, MeteringRectangle.METERING_WEIGHT_MAX - 1)};
+    }
+    void triggerAf() {
+        if (session == null || dev == null) return;
         try {
             CaptureRequest.Builder b = dev.createCaptureRequest(recording ? CameraDevice.TEMPLATE_RECORD : CameraDevice.TEMPLATE_PREVIEW);
             b.addTarget(previewSurface); if (recording) b.addTarget(recSurface); applySettings(b);
             b.set(CaptureRequest.CONTROL_AF_MODE, CaptureRequest.CONTROL_AF_MODE_AUTO); b.set(CaptureRequest.CONTROL_AF_TRIGGER, CaptureRequest.CONTROL_AF_TRIGGER_START);
+            if (!manualExp) b.set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER_START);
             session.capture(b.build(), null, bg);
         } catch (Exception ignored) {}
-        updateRepeating(); refreshChips();
+    }
+    void tapFocus(float x, float y, int w, int h) {
+        if (panel.getVisibility() == View.VISIBLE || stripWrap.getVisibility() == View.VISIBLE) { hidePanel(); hideStrip(); return; }
+        afRegions = regionAt(x, y, w, h); if (afRegions == null) return;
+        manualFocus = false; afLock = false; aeLock = false; guides.lock = false;
+        guides.sun = manualExp ? "ISO " + iso : "☀ " + (ev > 0 ? "+" : "") + ev; guides.focus(x, y);
+        triggerAf(); updateRepeating(); refreshChips();
+    }
+    void lockAt(float x, float y, int w, int h) {
+        afRegions = regionAt(x, y, w, h); if (afRegions == null) return;
+        manualFocus = false; afLock = true; aeLock = !manualExp; guides.lock = true; guides.sun = "AE/AF LOCK"; guides.focus(x, y);
+        triggerAf(); updateRepeating(); refreshChips();
+        toast("ล็อกโฟกัสและแสง — จิ้มที่อื่นเพื่อปลด");
+    }
+
+    // ---- LUT view assist + tools
+    void applyLut() {
+        if (lp == null) return;
+        lp.lutOn = lutIdx >= 0;
+        if (lutIdx < 0) { gv.requestRender(); return; }
+        final int idx = lutIdx; final String src = profile;
+        new Thread(() -> { float[] d; int n = Luts.N; if (idx == 100 && customLut != null) { d = customLut; n = customN; } else d = Luts.build(Math.min(idx, Luts.NAMES.length - 1), src); lp.setLut(d, n); }).start();
+    }
+    void openStrip(String mode) {
+        hidePanel();
+        if (mode.equals(stripMode) && stripWrap.getVisibility() == View.VISIBLE) { hideStrip(); return; }
+        stripMode = mode; strip.removeAllViews();
+        if (mode.equals("lut")) {
+            addStripBtn("ปิด", lutIdx < 0, v -> setLut(-1));
+            for (int i = 0; i < Luts.NAMES.length; i++) { final int idx = i; addStripBtn(Luts.NAMES[i], lutIdx == i, v -> setLut(idx)); }
+            if (customLut != null) addStripBtn("★ " + (customName == null ? "LUT ของฉัน" : customName), lutIdx == 100, v -> setLut(100));
+            addStripBtn("+ นำเข้า .cube", false, v -> importLut());
+            addStripBtn("⇩ ส่งออก LUT", false, v -> exportLut());
+        } else {
+            addStripBtn("Zebra", zebra, v -> { zebra = !zebra; lp.zebra = zebra; gv.requestRender(); openStripAgain(); });
+            addStripBtn("False Color", falseColor, v -> { falseColor = !falseColor; lp.falseColor = falseColor; gv.requestRender(); openStripAgain(); });
+            addStripBtn("Focus Peaking", peaking, v -> { peaking = !peaking; lp.peaking = peaking; gv.requestRender(); openStripAgain(); });
+            addStripBtn(aeLock || afLock ? "ปลดล็อก AE/AF" : "ล็อก AE/AF กลางจอ", aeLock || afLock, v -> { if (aeLock || afLock) { aeLock = false; afLock = false; guides.lock = false; updateRepeating(); refreshChips(); } else lockAt(gv.getWidth() / 2f, gv.getHeight() / 2f, gv.getWidth(), gv.getHeight()); openStripAgain(); });
+            addStripBtn("หมุนพรีวิว ↻", false, v -> { rotOffset = (rotOffset + 90) % 360; savePrefs(); layoutPreview(); toast("หมุนพรีวิว (ไฟล์วิดีโอไม่เปลี่ยน)"); });
+        }
+        stripWrap.setVisibility(View.VISIBLE); refreshChips();
+    }
+    void openStripAgain() { String m = stripMode; stripMode = null; openStrip(m); }
+    void hideStrip() { if (stripWrap != null) stripWrap.setVisibility(View.GONE); stripMode = null; }
+    void addStripBtn(String t, boolean on, View.OnClickListener l) {
+        TextView b = pill(t, on); b.setOnClickListener(l);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, dp(38)); p.setMarginEnd(dp(6)); strip.addView(b, p);
+    }
+    void setLut(int idx) {
+        lutIdx = idx; savePrefs(); applyLut(); openStripAgain();
+        if (idx >= 0 && "natural".equals(profile)) toast("LUT ออกแบบมาสำหรับ MoonLog / HLG — ใน Natural จะเป็นฟิลเตอร์พรีวิวแทน");
+        else if (idx >= 0) toast("พรีวิว LUT: " + (idx == 100 ? customName : Luts.NAMES[idx]) + " — ไฟล์วิดีโอยังเป็น log สำหรับเกรดทีหลัง");
+    }
+    void importLut() {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT); i.addCategory(Intent.CATEGORY_OPENABLE); i.setType("*/*");
+        try { startActivityForResult(i, REQ_LUT); } catch (Exception e) { toast("เปิดตัวเลือกไฟล์ไม่ได้"); }
+    }
+    @Override protected void onActivityResult(int req, int result, Intent data) {
+        super.onActivityResult(req, result, data);
+        if (req != REQ_LUT || result != RESULT_OK || data == null || data.getData() == null) return;
+        try (java.io.InputStream in = getContentResolver().openInputStream(data.getData())) {
+            Object[] r = Luts.parseCube(in); customN = (Integer) r[0]; customLut = (float[]) r[1];
+            String name = data.getData().getLastPathSegment(); if (name != null) { name = name.substring(name.lastIndexOf('/') + 1).replace(".cube", ""); if (name.length() > 18) name = name.substring(0, 18); }
+            customName = name;
+            try (java.io.FileOutputStream o = new java.io.FileOutputStream(new File(getFilesDir(), "custom.cube"))) { o.write(Luts.toCube(customName == null ? "custom" : customName, customLut, customN).getBytes("UTF-8")); }
+            sp.edit().putString("customName", customName).apply();
+            setLut(100); toast("นำเข้า LUT แล้ว (" + customN + "³)");
+        } catch (Exception e) { toast("นำเข้าไม่ได้: " + e.getMessage()); }
+    }
+    void loadCustomLut() {
+        File f = new File(getFilesDir(), "custom.cube"); if (!f.exists()) return;
+        try (java.io.InputStream in = new java.io.FileInputStream(f)) { Object[] r = Luts.parseCube(in); customN = (Integer) r[0]; customLut = (float[]) r[1]; customName = sp.getString("customName", "LUT ของฉัน"); }
+        catch (Exception ignored) {}
+    }
+    void exportLut() {
+        final String src = profile;
+        new Thread(() -> {
+            try {
+                String tag = "hlg10".equals(src) ? "HLG" : "log8".equals(src) ? "MoonLog" : "Natural";
+                for (int i = 0; i < Luts.NAMES.length; i++) Luts.saveToDownloads(this, "MoonCam_" + tag + "_" + Luts.NAMES[i].replace(" ", "").replace("&", "and").replace(".", "") + ".cube", Luts.toCube("MoonCam " + tag + " " + Luts.NAMES[i], Luts.build(i, src), Luts.N));
+                toast("ส่งออก LUT 10 ไฟล์ (" + tag + ") ไว้ที่ Download/MoonCam LUTs แล้ว");
+            } catch (Exception e) { toast("ส่งออกไม่ได้: " + e.getMessage()); }
+        }).start();
     }
 
     // ---- preview geometry
+    int previewRotation() { int r = displayDegrees(); return (r == 90 ? 90 : r == 270 ? -90 : r == 180 ? 180 : 0) + rotOffset; }
     void layoutPreview() {
         int W = root.getWidth(), H = root.getHeight(); if (W == 0 || H == 0) { root.post(this::layoutPreview); return; }
         int w = W, h = W * 9 / 16; if (h > H) { h = H; w = H * 16 / 9; }
-        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(w, h, Gravity.CENTER); tv.setLayoutParams(lp);
+        gv.setLayoutParams(new FrameLayout.LayoutParams(w, h, Gravity.CENTER));
         guides.setLayoutParams(new FrameLayout.LayoutParams(w, h, Gravity.CENTER));
-        tv.post(this::configureTransform);
-    }
-    void configureTransform() {
-        if (previewSize == null) return;
-        int vw = tv.getWidth(), vh = tv.getHeight(); if (vw == 0) return;
-        int rot = displayDegrees(); Matrix m = new Matrix();
-        RectF view = new RectF(0, 0, vw, vh), buf = new RectF(0, 0, previewSize.getHeight(), previewSize.getWidth());
-        float cx = view.centerX(), cy = view.centerY();
-        if (rot == 90 || rot == 270) {
-            buf.offset(cx - buf.centerX(), cy - buf.centerY()); m.setRectToRect(view, buf, Matrix.ScaleToFit.FILL);
-            float s = Math.max((float) vh / previewSize.getHeight(), (float) vw / previewSize.getWidth()); m.postScale(s, s, cx, cy); m.postRotate(rot - 180, cx, cy);
-        } else if (rot == 180) m.postRotate(180, cx, cy);
-        tv.setTransform(m);
+        if (lp != null) { lp.rotationDeg = previewRotation(); gv.requestRender(); }
+        applyLut();
     }
     void toast(String s) { ui.post(() -> Toast.makeText(this, s, Toast.LENGTH_SHORT).show()); }
 
-    /** Frame guides, grid and focus square drawn over the preview. */
+    /** Frame guides, grid and the focus / exposure square drawn over the preview. */
     class GuideView extends View {
-        final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG), shade = new Paint(), gold = new Paint(Paint.ANTI_ALIAS_FLAG);
-        float fx = -1, fy = -1; long ft = 0;
-        GuideView(Context c) { super(c); line.setColor(0x66FFFFFF); line.setStrokeWidth(dp(1)); shade.setColor(0x88000000); gold.setColor(GOLD); gold.setStyle(Paint.Style.STROKE); gold.setStrokeWidth(dp(1.5f)); }
-        void focus(float x, float y) { fx = x; fy = y; ft = SystemClock.elapsedRealtime(); invalidate(); postDelayed(this::invalidate, 1300); }
+        final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG), shade = new Paint(), gold = new Paint(Paint.ANTI_ALIAS_FLAG), text = new Paint(Paint.ANTI_ALIAS_FLAG);
+        float fx = -1, fy = -1; long ft = 0; String sun = ""; boolean lock = false;
+        GuideView(Context c) {
+            super(c); line.setColor(0x66FFFFFF); line.setStrokeWidth(dp(1)); shade.setColor(0x88000000);
+            gold.setColor(GOLD); gold.setStyle(Paint.Style.STROKE); gold.setStrokeWidth(dp(1.8f));
+            text.setColor(GOLD); text.setTextSize(dp(13)); text.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)); text.setShadowLayer(dp(2), 0, 0, 0xCC000000);
+        }
+        void focus(float x, float y) { fx = x; fy = y; keep(); }
+        void keep() { ft = SystemClock.elapsedRealtime(); invalidate(); removeCallbacks(fade); postDelayed(fade, 2600); }
+        final Runnable fade = this::invalidate;
+        boolean showing() { return fx >= 0 && (lock || SystemClock.elapsedRealtime() - ft < 2500); }
         @Override protected void onDraw(Canvas c) {
             int w = getWidth(), h = getHeight();
             if (guide >= 1) { c.drawLine(w / 3f, 0, w / 3f, h, line); c.drawLine(2 * w / 3f, 0, 2 * w / 3f, h, line); c.drawLine(0, h / 3f, w, h / 3f, line); c.drawLine(0, 2 * h / 3f, w, 2 * h / 3f, line); }
             float r = guide == 2 ? 2.39f : guide == 3 ? 1.85f : 0;
             if (r > 0) { float bh = (h - w / r) / 2; c.drawRect(0, 0, w, bh, shade); c.drawRect(0, h - bh, w, h, shade); c.drawLine(0, bh, w, bh, gold); c.drawLine(0, h - bh, w, h - bh, gold); }
             if (guide == 4) { float bw = h * 9f / 16f, x0 = (w - bw) / 2; c.drawRect(0, 0, x0, h, shade); c.drawRect(x0 + bw, 0, w, h, shade); c.drawRect(x0, 0, x0 + bw, h, gold); }
-            if (fx >= 0 && SystemClock.elapsedRealtime() - ft < 1200) { float s = dp(36); c.drawRect(fx - s, fy - s, fx + s, fy + s, gold); }
+            if (showing()) {
+                float s = dp(38); c.drawRect(fx - s, fy - s, fx + s, fy + s, gold);
+                float sx = fx + s + dp(10); c.drawLine(sx, fy - s, sx, fy + s, gold);
+                if (!sun.isEmpty()) c.drawText(sun, sx + dp(8), fy + dp(5), text);
+                if (lock) c.drawText("LOCK", fx - s, fy - s - dp(8), text);
+            }
         }
     }
 
