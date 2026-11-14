@@ -41,27 +41,61 @@ function blur(a, w, h, r) { // separable box blur, 2 passes ≈ gaussian
   return o;
 }
 
-/** New canvas with the background replaced by `color` (hex). Edges are feathered and old-background colour spill is removed. */
+function box1(a, w, h, r) { // one-pass box mean (for the guided filter)
+  const t = new Float32Array(a.length), o = new Float32Array(a.length), n = 2 * r + 1;
+  for (let y = 0; y < h; y++) { let s = 0, row = y * w; for (let x = -r; x <= r; x++) s += a[row + Math.min(w - 1, Math.max(0, x))]; for (let x = 0; x < w; x++) { t[row + x] = s / n; s += a[row + Math.min(w - 1, x + r + 1)] - a[row + Math.max(0, x - r)]; } }
+  for (let x = 0; x < w; x++) { let s = 0; for (let y = -r; y <= r; y++) s += t[Math.min(h - 1, Math.max(0, y)) * w + x]; for (let y = 0; y < h; y++) { o[y * w + x] = s / n; s += t[Math.min(h - 1, y + r + 1) * w + x] - t[Math.max(0, y - r) * w + x]; } }
+  return o;
+}
+/** Guided filter (He et al.): snaps the soft model mask onto the photo's real edges (hair strands, shoulders). */
+function guided(I, p, w, h, r, eps) {
+  const N = I.length, Ip = new Float32Array(N), II = new Float32Array(N);
+  for (let i = 0; i < N; i++) { Ip[i] = I[i] * p[i]; II[i] = I[i] * I[i]; }
+  const mI = box1(I, w, h, r), mp = box1(p, w, h, r), mIp = box1(Ip, w, h, r), mII = box1(II, w, h, r), A = new Float32Array(N), B = new Float32Array(N);
+  for (let i = 0; i < N; i++) { const cov = mIp[i] - mI[i] * mp[i], v = mII[i] - mI[i] * mI[i]; A[i] = cov / (v + eps); B[i] = mp[i] - A[i] * mI[i]; }
+  const mA = box1(A, w, h, r), mB = box1(B, w, h, r), q = new Float32Array(N);
+  for (let i = 0; i < N; i++) q[i] = Math.min(1, Math.max(0, mA[i] * I[i] + mB[i]));
+  return q;
+}
+
+/** New canvas with the background replaced. color = hex, or "limbo" for a seamless studio white with soft light fall-off and a faint contact shadow.
+ *  Edges: model mask → guided filter on the photo → feather; old-background colour spill is removed at the edge. */
 export async function replaceBackground(src, color) {
-  const w = src.width, h = src.height, g = src.getContext("2d"), img = g.getImageData(0, 0, w, h), d = img.data;
+  const w = src.width, h = src.height, g = src.getContext("2d"), img = g.getImageData(0, 0, w, h), d = img.data, N = w * h;
   let a = await personAlpha(src);
-  // tighten the soft model edge, then feather a little
-  a = blur(a, w, h, Math.max(1, Math.round(w / 500)));
-  for (let i = 0; i < a.length; i++) { const t = Math.min(1, Math.max(0, (a[i] - .3) / .4)); a[i] = t * t * (3 - 2 * t); }
-  // local estimate of the old background colour (for spill removal at the hair / shoulder edge)
-  const R = Math.max(4, Math.round(w / 25)), wb = new Float32Array(w * h), cr = new Float32Array(w * h), cg = new Float32Array(w * h), cb = new Float32Array(w * h);
-  for (let i = 0; i < a.length; i++) { const k = (1 - a[i]) ** 2; wb[i] = k; cr[i] = d[i * 4] * k; cg[i] = d[i * 4 + 1] * k; cb[i] = d[i * 4 + 2] * k; }
+  // 1) firm up the model mask, 2) edge-aware refinement guided by the photo, 3) gentle final feather
+  for (let i = 0; i < N; i++) { const t = Math.min(1, Math.max(0, (a[i] - .25) / .5)); a[i] = t * t * (3 - 2 * t); }
+  const L = new Float32Array(N); for (let i = 0; i < N; i++) L[i] = (.299 * d[i * 4] + .587 * d[i * 4 + 1] + .114 * d[i * 4 + 2]) / 255;
+  a = guided(L, a, w, h, Math.max(3, Math.round(w / 110)), 2e-4);
+  a = guided(L, a, w, h, Math.max(2, Math.round(w / 260)), 1e-4);
+  for (let i = 0; i < N; i++) { const t = Math.min(1, Math.max(0, (a[i] - .08) / .84)); a[i] = t * t * (3 - 2 * t); }
+  // local estimate of the old background colour (spill removal)
+  const R = Math.max(4, Math.round(w / 25)), wb = new Float32Array(N), cr = new Float32Array(N), cg = new Float32Array(N), cb = new Float32Array(N);
+  for (let i = 0; i < N; i++) { const k = (1 - a[i]) ** 2; wb[i] = k; cr[i] = d[i * 4] * k; cg[i] = d[i * 4 + 1] * k; cb[i] = d[i * 4 + 2] * k; }
   const bw = blur(wb, w, h, R), br = blur(cr, w, h, R), bgc = blur(cg, w, h, R), bb = blur(cb, w, h, R);
-  let mr = 0, mg = 0, mb = 0, mw = 0; for (let i = 0; i < a.length; i++) { mr += cr[i]; mg += cg[i]; mb += cb[i]; mw += wb[i]; }
+  let mr = 0, mg = 0, mb = 0, mw = 0; for (let i = 0; i < N; i++) { mr += cr[i]; mg += cg[i]; mb += cb[i]; mw += wb[i]; }
   mr /= mw || 1; mg /= mw || 1; mb /= mw || 1;
-  const n = parseInt(color.slice(1), 16), nr = n >> 16, ng = n >> 8 & 255, nb = n & 255;
-  for (let i = 0; i < a.length; i++) {
+  // new background, per pixel
+  const limbo = color === "limbo", n = limbo ? 0xffffff : parseInt(color.slice(1), 16), nr = n >> 16, ng = n >> 8 & 255, nb = n & 255;
+  let shadow = null;
+  if (limbo) { // faint, very soft shadow from the subject, nudged down-right like a big soft key light
+    const sh = new Float32Array(N), dx = Math.round(w * .012), dy = Math.round(h * .018);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const sx = x - dx, sy = y - dy; sh[y * w + x] = sx >= 0 && sy >= 0 ? a[sy * w + sx] : 0; }
+    shadow = blur(sh, w, h, Math.max(6, Math.round(w / 22)));
+  }
+  const cx = w / 2, cy = h * .4, diag = Math.hypot(w, h) / 2;
+  for (let i = 0; i < N; i++) {
     const al = a[i], k = 1 - al; if (k <= 0.002) continue;
-    const ww = bw[i] > 1e-3 ? 1 : 0, or = ww ? br[i] / bw[i] : mr, og = ww ? bgc[i] / bw[i] : mg, ob = ww ? bb[i] / bw[i] : mb;
-    // I = F·a + B0·(1-a)  →  out = F·a + N·(1-a) = I + (1-a)(N - B0)
-    d[i * 4] = Math.max(0, Math.min(255, d[i * 4] + k * (nr - or)));
-    d[i * 4 + 1] = Math.max(0, Math.min(255, d[i * 4 + 1] + k * (ng - og)));
-    d[i * 4 + 2] = Math.max(0, Math.min(255, d[i * 4 + 2] + k * (nb - ob)));
+    let tr = nr, tg = ng, tb = nb;
+    if (limbo) {
+      const x = i % w, y = (i / w) | 0, dd = Math.hypot(x - cx, (y - cy) * 1.15) / diag, f = Math.min(1, Math.max(0, (dd - .3) / .75));
+      const fall = 255 - 13 * f * f * (3 - 2 * f) - (y > h * .7 ? (y - h * .7) / (h * .3) * 4 : 0), s = 1 - .075 * shadow[i];
+      tr = tg = fall * s; tb = Math.min(255, fall * s + .6);
+    }
+    const ww = bw[i] > 1e-3, or = ww ? br[i] / bw[i] : mr, og = ww ? bgc[i] / bw[i] : mg, ob = ww ? bb[i] / bw[i] : mb;
+    d[i * 4] = Math.max(0, Math.min(255, d[i * 4] + k * (tr - or)));
+    d[i * 4 + 1] = Math.max(0, Math.min(255, d[i * 4 + 1] + k * (tg - og)));
+    d[i * 4 + 2] = Math.max(0, Math.min(255, d[i * 4 + 2] + k * (tb - ob)));
   }
   const o = document.createElement("canvas"); o.width = w; o.height = h; o.getContext("2d").putImageData(img, 0, 0);
   return o;

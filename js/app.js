@@ -567,12 +567,12 @@ async function visaProcess(full) {
     $("#vres").hidden = false;
   } catch (e) { toast("จัดรูปไม่สำเร็จ: " + (e && e.message || e)); }
 }
-const VBG = [["orig", "เดิม", null], ["white", "ขาว", "#ffffff"], ["blue", "ฟ้า", "#4f8fd8"], ["grey", "เทาอ่อน", "#e4e5e7"], ["cream", "ครีม", "#f1e9d8"]];
-function suggestedBg(s) { return /^ครีม/.test(s.bg) ? "cream" : /^เทา/.test(s.bg) ? "grey" : "white"; }
+const VBG = [["orig", "เดิม", null], ["limbo", "ขาว Limbo", "limbo"], ["white", "ขาวล้วน", "#ffffff"], ["blue", "ฟ้า", "#4f8fd8"], ["grey", "เทาอ่อน", "#e4e5e7"], ["cream", "ครีม", "#f1e9d8"]];
+function suggestedBg(s) { return /^ครีม/.test(s.bg) ? "cream" : /^เทา/.test(s.bg) ? "grey" : "limbo"; }
 function renderVisaBg() {
   const V = camState.visa, box = $("#vres-bg"); box.textContent = "";
   const sug = suggestedBg(V.spec);
-  VBG.forEach(([k, n, col]) => { const b = el("button", "chip" + (V.bg === k ? " on" : ""), (col ? `<span class="sw" style="background:${col}"></span>` : "") + n + (k === sug ? " ★" : ""));
+  VBG.forEach(([k, n, col]) => { const b = el("button", "chip" + (V.bg === k ? " on" : ""), (col ? `<span class="sw" style="background:${col === "limbo" ? "radial-gradient(circle at 45% 40%,#fff 40%,#e6e6e6)" : col}"></span>` : "") + n + (k === sug ? " ★" : ""));
     b.onclick = () => setVisaBg(k); box.appendChild(b); });
 }
 async function setVisaBg(k) {
