@@ -1,8 +1,8 @@
 // MoonCam service worker: network-first for the page and app code (so updates arrive on the
 // next open), cache-first for heavy static assets (AI model, wasm, fonts). Works offline.
-const CACHE = "mooncam-v7";
-const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./css/app.css?v=7", "./js/app.js?v=7", "./js/engine.js", "./js/looks.js", "./js/fx.js",
-  "./js/face.js", "./js/social.js", "./js/exif.js", "./js/camera.js", "./js/device.js", "./js/store.js", "./js/analog.js", "./js/visa.js", "./vendor/piexif.js", "./vendor/qrcode.js",
+const CACHE = "mooncam-v8";
+const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./css/app.css?v=8", "./js/app.js?v=8", "./js/engine.js", "./js/looks.js", "./js/fx.js",
+  "./js/face.js", "./js/social.js", "./js/exif.js", "./js/camera.js", "./js/device.js", "./js/store.js", "./js/analog.js", "./js/visa.js", "./js/segment.js", "./vendor/piexif.js", "./vendor/qrcode.js",
   "./icons/icon-192.png", "./icons/icon-512.png"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => Promise.all(SHELL.map(u => c.add(new Request(u, {cache: "reload"})).catch(() => {})))));

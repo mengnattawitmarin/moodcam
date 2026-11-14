@@ -9,6 +9,7 @@ import * as CAM from "./camera.js";
 import {detectDevice} from "./device.js";
 import * as AN from "./analog.js";
 import * as VI from "./visa.js";
+import * as SG from "./segment.js";
 import * as DB from "./store.js";
 
 const VERSION = "v6";
@@ -558,17 +559,50 @@ async function visaProcess(full) {
     await F.loadFace();
     const small = scaled(full, 1400), faces = await detectAny(small);
     if (!faces.length) return toast("ไม่พบใบหน้าในรูป ลองถ่ายใหม่ให้เห็นหน้าชัด ๆ", 2200);
-    const m = VI.measure(faces[0]), fit = VI.fit(full, m, s), list = VI.checks(fit.canvas, m, s, fit);
-    camState.visaOut = {canvas: fit.canvas, spec: s};
+    const m = VI.measure(faces[0]), fit = VI.fit(full, m, s);
+    camState.visa = {orig: fit.canvas, m, fit, spec: s, bg: "orig", cache: {}};
     $("#vres-title").textContent = `${s.flag} ${s.name}`; $("#vres-size").textContent = `${s.w}×${s.h} มม. · ${fit.canvas.width}×${fit.canvas.height} px · ${s.dpi || 600} dpi`;
-    $("#vres-img").src = fit.canvas.toDataURL("image/jpeg", .9); $("#vres-img").style.aspectRatio = `${s.w}/${s.h}`;
-    const ul = $("#vres-list"); ul.textContent = "";
-    const fails = list.filter(x => x.pass === false).length;
-    ul.appendChild(el("li", "sum " + (fails ? "warn" : "ok"), fails ? `ควรแก้ ${fails} ข้อก่อนใช้จริง` : "ผ่านทุกข้อที่ตรวจได้ ✓"));
-    list.forEach(x => ul.appendChild(el("li", x.pass === null ? "info" : x.pass ? "ok" : "warn", `<b>${x.pass === null ? "ℹ" : x.pass ? "✓" : "!"}</b><span>${x.pass === false && x.hint ? x.hint : x.t}</span>`)));
-    ul.appendChild(el("li", "info", "<b>ℹ</b><span>แอปวัดจากจุดบนใบหน้าโดยประมาณ — ตรวจกฎของประเทศปลายทางอีกครั้งก่อนยื่น</span>"));
+    $("#vres-img").style.aspectRatio = `${s.w}/${s.h}`;
+    renderVisaBg(); showVisa(fit.canvas);
     $("#vres").hidden = false;
   } catch (e) { toast("จัดรูปไม่สำเร็จ: " + (e && e.message || e)); }
+}
+const VBG = [["orig", "เดิม", null], ["white", "ขาว", "#ffffff"], ["blue", "ฟ้า", "#4f8fd8"], ["grey", "เทาอ่อน", "#e4e5e7"], ["cream", "ครีม", "#f1e9d8"]];
+function suggestedBg(s) { return /^ครีม/.test(s.bg) ? "cream" : /^เทา/.test(s.bg) ? "grey" : "white"; }
+function renderVisaBg() {
+  const V = camState.visa, box = $("#vres-bg"); box.textContent = "";
+  const sug = suggestedBg(V.spec);
+  VBG.forEach(([k, n, col]) => { const b = el("button", "chip" + (V.bg === k ? " on" : ""), (col ? `<span class="sw" style="background:${col}"></span>` : "") + n + (k === sug ? " ★" : ""));
+    b.onclick = () => setVisaBg(k); box.appendChild(b); });
+}
+async function setVisaBg(k) {
+  const V = camState.visa; if (!V || V.busy) return;
+  V.bg = k; renderVisaBg();
+  if (k === "orig") return showVisa(V.orig);
+  const col = VBG.find(x => x[0] === k)[2];
+  if (V.cache[k]) return showVisa(V.cache[k]);
+  V.busy = true; const ul = $("#vres-list"); ul.style.opacity = ".4";
+  toast(SG_LOADED ? "กำลังแยกคนออกจากพื้นหลัง…" : "กำลังโหลดตัวช่วยแยกพื้นหลัง (ครั้งแรก ~16MB)…", 2500);
+  try { await new Promise(r => setTimeout(r, 30)); const c = await SG.replaceBackground(V.orig, col); SG_LOADED = true; V.cache[k] = c; if (V.bg === k) showVisa(c); }
+  catch (e) { toast("แยกพื้นหลังไม่สำเร็จ: " + (e && e.message || e)); V.bg = "orig"; renderVisaBg(); }
+  finally { V.busy = false; ul.style.opacity = ""; }
+}
+let SG_LOADED = false;
+function showVisa(canvas) {
+  const V = camState.visa, s = V.spec, list = VI.checks(canvas, V.m, s, V.fit);
+  camState.visaOut = {canvas, spec: s};
+  $("#vres-img").src = canvas.toDataURL("image/jpeg", .9);
+  const ul = $("#vres-list"); ul.textContent = "";
+  const fails = list.filter(x => x.pass === false).length;
+  ul.appendChild(el("li", "sum " + (fails ? "warn" : "ok"), fails ? `ควรแก้ ${fails} ข้อก่อนใช้จริง` : "ผ่านทุกข้อที่ตรวจได้ ✓"));
+  list.forEach(x => {
+    const bgFix = x.pass === false && /พื้นหลัง/.test(x.hint || "") && V.bg === "orig";
+    const li = el("li", x.pass === null ? "info" : x.pass ? "ok" : "warn", `<b>${x.pass === null ? "ℹ" : x.pass ? "✓" : "!"}</b><span>${x.pass === false && x.hint ? x.hint : x.t}</span>`);
+    if (bgFix) { const fb = el("button", "chip fix", "เปลี่ยนเป็นพื้นหลัง" + VBG.find(v => v[0] === suggestedBg(s))[1]); fb.onclick = () => setVisaBg(suggestedBg(s)); li.appendChild(fb); }
+    ul.appendChild(li);
+  });
+  if (V.bg !== "orig") ul.appendChild(el("li", "info", "<b>ℹ</b><span>พื้นหลังแยกด้วย AI ในเครื่อง — ซูมดูขอบผมก่อนใช้ บางประเทศไม่รับรูปที่แก้พื้นหลัง ถ้าทำได้ถ่ายหน้าผนังจริงจะดีที่สุด</span>"));
+  ul.appendChild(el("li", "info", "<b>ℹ</b><span>แอปวัดจากจุดบนใบหน้าโดยประมาณ — ตรวจกฎของประเทศปลายทางอีกครั้งก่อนยื่น</span>"));
 }
 async function visaSave(kind) {
   const o = camState.visaOut; if (!o) return;
