@@ -8,6 +8,7 @@ import * as EX from "./exif.js";
 import * as CAM from "./camera.js";
 import {detectDevice} from "./device.js";
 import * as AN from "./analog.js";
+import * as VI from "./visa.js";
 import * as DB from "./store.js";
 
 const VERSION = "v6";
@@ -24,7 +25,7 @@ const haptic = (ms = 8) => { try { navigator.vibrate && navigator.vibrate(ms); }
 let toastT; function toast(m, ms = 2600) { let t = $(".toast"); if (!t) { t = el("div", "toast"); t.setAttribute("role", "status"); document.body.appendChild(t); } t.textContent = m; t.hidden = false; t.style.animation = "none"; void t.offsetWidth; t.style.animation = ""; clearTimeout(toastT); toastT = setTimeout(() => t.hidden = true, ms); }
 
 // ------------------------------------------------------------------ preferences & state
-const prefs = Object.assign({grid: true, center: false, gps: false, stripGpsOnShare: false, keepExif: true, quality: .95, deviceProfile: true, rollSize: 24, ratio: "3:4", timer: 0, flash: "off", lastLook: "teal_orange", strength: 100, level: false, histo: false, sound: true, mirror: true, tapShoot: false, tray: "looks", editAfter: false, instantModel: "classic", instantFrame: 0, instantFmt: "card", pack: 10, film: "sunny_gold", advanced: true}, LS.get("prefs", {}));
+const prefs = Object.assign({grid: true, center: false, gps: false, stripGpsOnShare: false, keepExif: true, quality: .95, deviceProfile: true, rollSize: 24, ratio: "3:4", timer: 0, flash: "off", lastLook: "teal_orange", strength: 100, level: false, histo: false, sound: true, mirror: true, tapShoot: false, tray: "looks", editAfter: false, instantModel: "classic", instantFrame: 0, instantFmt: "card", pack: 10, film: "sunny_gold", advanced: true, visaSpec: "schengen"}, LS.get("prefs", {}));
 const savePrefs = () => LS.set("prefs", prefs);
 let mine = LS.get("looks", []).map(l => Object.assign(l, {adj: E.A(l.adj)}));
 const saveMine = () => LS.set("looks", mine);
@@ -115,7 +116,7 @@ function show(v) { views.forEach(q => $(q).hidden = q !== v); if (v === "#v-cam"
 const RATIOS = {"3:4": 3 / 4, "9:16": 9 / 16, "1:1": 1, "4:5": 4 / 5, "full": 0};
 const camState = {mode: "photo", prevBody: null, prevLook: null, lastPos: null, watch: null, starting: false, thumbSrc: null,
   ev: 0, wb: 0, zoom: 1, digital: 1, ultra: false, focusAt: {x: .5, y: .5}, tray: prefs.tray || "looks"};
-const ratioVal = () => camState.mode === "instant" ? AN.instantOf(prefs.instantModel).ratio : camState.mode === "roll" ? 2 / 3 : prefs.ratio === "full" ? ($("#v-cam").clientWidth || innerWidth) / ($("#v-cam").clientHeight || innerHeight) : RATIOS[prefs.ratio] || 3 / 4;
+const ratioVal = () => camState.mode === "visa" ? (s => s.w / s.h)(VI.specOf(prefs.visaSpec)) : camState.mode === "instant" ? AN.instantOf(prefs.instantModel).ratio : camState.mode === "roll" ? 2 / 3 : prefs.ratio === "full" ? ($("#v-cam").clientWidth || innerWidth) / ($("#v-cam").clientHeight || innerHeight) : RATIOS[prefs.ratio] || 3 / 4;
 // camera-only software corrections (used when the phone does not expose real EV / white balance)
 function camSoft() {
   const mc = CAM.manualCaps(), o = {exposure: 0, temp: 0};
@@ -422,8 +423,9 @@ async function shoot() {
     if (prefs.timer) { const c = $("#vf-count"); c.hidden = false; for (let i = prefs.timer; i > 0; i--) { c.textContent = i; await new Promise(r => setTimeout(r, 1000)); } c.hidden = true; }
     clickSound();
     const f = $("#vf-flash"); f.style.opacity = ".85"; setTimeout(() => f.style.opacity = "0", 70);
-    const front = $("#vf").classList.contains("front"), mirror = front && prefs.mirror !== false;
+    const front = $("#vf").classList.contains("front"), mirror = front && prefs.mirror !== false && camState.mode !== "visa";
     const {blob, canvas} = await CAM.capture({flash: prefs.flash === "on", mirror});
+    if (camState.mode === "visa") { await visaProcess(canvas); return; }
     let shot = cropToRatio(canvas, ratioVal());
     if (camState.digital > 1.01) { const k = camState.digital, w = Math.round(shot.width / k), h = Math.round(shot.height / k), o = newCanvas(w, h); o.getContext("2d").drawImage(shot, (shot.width - w) / 2, (shot.height - h) / 2, w, h, 0, 0, w, h); shot = o; }
     const untouched = blob && shot === canvas;
@@ -470,6 +472,114 @@ async function editLast() {
 }
 window.__mcShutter = () => { if (!$("#v-cam").hidden) shoot(); };
 
+// ================================================================== MORE MODES · VISA / ID PHOTO
+function openMoreSheet() {
+  haptic();
+  const b = el("div"), g = el("div", "pick-grid");
+  const card = (ic, t, d, fn) => { const c = el("button", "pick more", `<span class="more-ic">${ic}</span><b>${t}</b><small>${d}</small>`); c.onclick = () => { closeSheet(); fn(); }; g.appendChild(c); };
+  card("🛂", "รูปวีซ่า / พาสปอร์ต", "กรอบขนาดตามประเทศ ตรวจตำแหน่งหน้า จัดขนาดให้อัตโนมัติ พร้อมแผ่นพิมพ์", () => setMode("visa"));
+  card("🎬", "ภาพยนตร์", "ถ่ายวิดีโอ log / 10-bit แบบกล้องโปร (แอป Android)", openCinema);
+  card("🎞", "ม้วนฟิล์ม", "ถ่ายครบม้วนแล้วล้างดูทีเดียว", () => setMode("roll"));
+  card("📷", "โพลารอยด์", "รูปค่อย ๆ ออกมาและแห้งเหมือนจริง", () => setMode("instant"));
+  b.appendChild(g); openSheet("โหมดเพิ่มเติม", b);
+}
+function openVisaSheet() {
+  const b = el("div"); b.appendChild(note("เลือกประเภทรูป — กรอบในกล้องจะเปลี่ยนตามขนาดจริง และจัดสัดส่วนศีรษะให้อัตโนมัติหลังถ่าย"));
+  const g = el("div", "pick-grid");
+  VI.SPECS.forEach(s => { const c = el("button", "pick visa" + (s.id === prefs.visaSpec ? " on" : ""), `<span class="visa-mini" style="aspect-ratio:${s.w}/${s.h}"><i></i></span><b>${s.flag} ${s.name}</b><em class="num">${s.w}×${s.h} มม. · ศีรษะ ${s.head[0]}–${s.head[1]}</em><small>พื้นหลัง${s.bg}${s.note ? " · " + s.note : ""}</small>`);
+    c.onclick = () => { prefs.visaSpec = s.id; savePrefs(); closeSheet(); renderSkinChip(); applyLivePreview(); drawVisaGuide(); toast(`${s.name} · ${s.w}×${s.h} มม.`, 1400); }; g.appendChild(c); });
+  b.appendChild(g);
+  b.appendChild(button(`${icon("album")} ใช้รูปที่มีอยู่แล้วจากอัลบั้ม`, "big ghost", () => { closeSheet(); const i = document.createElement("input"); i.type = "file"; i.accept = "image/*"; i.onchange = async () => { const f = i.files[0]; if (!f) return; const bmp = await createImageBitmap(f); const c = newCanvas(bmp.width, bmp.height); c.getContext("2d").drawImage(bmp, 0, 0); visaProcess(c); }; i.click(); }));
+  b.appendChild(note("เคล็ดลับ: ยืนห่างผนังสีขาว ~1 เมตร หันหน้าเข้าหาแสง (หน้าต่าง) ให้คนอื่นถ่ายระดับสายตาจะดีที่สุด · ไม่ยิ้มเห็นฟัน · เห็นใบหูและคิ้ว · ไม่ใส่หมวก"));
+  openSheet("รูปวีซ่า / พาสปอร์ต", b);
+}
+let visaT = null, visaBusy = false;
+function visaMode(on) {
+  $("#v-cam").classList.toggle("visa-on", on); $("#vf-visa").hidden = !on; $("#vf-visa-hint").hidden = !on;
+  const mm = $("#m-more"); mm.classList.toggle("on", on); mm.textContent = on ? "วีซ่า" : "เพิ่มเติม";
+  $("#c-skin").hidden = !on && !skinOn(); if (on) renderSkinChip();
+  clearInterval(visaT); visaT = null;
+  if (!on) return;
+  drawVisaGuide(); visaHint("กำลังโหลดตัวช่วยจับใบหน้า… (ครั้งแรกประมาณ 13MB)", "");
+  F.loadFace().then(() => { visaT = setInterval(visaLive, 900); visaLive(); }).catch(() => visaHint("โหลดตัวช่วยจับหน้าไม่ได้ — จัดศีรษะให้อยู่ในเส้นเอง", "warn"));
+  if (!prefs.visaTip) { prefs.visaTip = 1; savePrefs(); setTimeout(openVisaSheet, 400); }
+}
+function visaHint(t, cls) { const h = $("#vf-visa-hint"); h.textContent = t; h.className = "visa-hint " + (cls || ""); $("#vf-visa").classList.toggle("ok", cls === "ok"); }
+function drawVisaGuide() {
+  const s = VI.specOf(prefs.visaSpec), top = VI.topMargin(s), ht = VI.headTarget(s), cx = s.w / 2;
+  const eye = top + ht * .47, rx = ht * .37;
+  $("#vf-visa").innerHTML = `<svg viewBox="0 0 ${s.w} ${s.h}" preserveAspectRatio="none">
+    <rect class="band" x="0" y="${top + s.head[0]}" width="${s.w}" height="${s.head[1] - s.head[0]}"/>
+    <line class="ln" x1="0" x2="${s.w}" y1="${top}" y2="${top}"/>
+    <ellipse class="oval" cx="${cx}" cy="${top + ht / 2}" rx="${rx}" ry="${ht / 2}"/>
+    <line class="eye" x1="${cx - rx * 1.2}" x2="${cx + rx * 1.2}" y1="${eye}" y2="${eye}"/>
+    <line class="mid" x1="${cx}" x2="${cx}" y1="0" y2="${s.h}"/>
+    <path class="sh" d="M ${cx - ht * .95} ${s.h} Q ${cx - ht * .9} ${top + ht * 1.12} ${cx - ht * .3} ${top + ht * 1.06} M ${cx + ht * .95} ${s.h} Q ${cx + ht * .9} ${top + ht * 1.12} ${cx + ht * .3} ${top + ht * 1.06}"/>
+  </svg><span class="vlab t" style="top:${top / s.h * 100}%">เส้นบนสุดของศีรษะ</span><span class="vlab c" style="top:${(top + s.head[0]) / s.h * 100}%">ช่วงคาง ${s.head[0]}–${s.head[1]} มม.</span><span class="vlab sz">${s.w}×${s.h} มม.</span>`;
+}
+// the face model misses small faces: retry on square crops around the upper centre and map points back
+async function detectAny(c) {
+  let f = await F.detectFaces(c); if (f.length) return f;
+  const S = Math.min(c.width, c.height);
+  for (const [k, cy] of [[1, .42], [.75, .38], [.55, .35], [.42, .32]]) {
+    const s = S * k, x = (c.width - s) / 2, y = Math.max(0, Math.min(c.height - s, c.height * cy - s / 2));
+    const n = Math.min(720, Math.round(s)), t = newCanvas(n, n); t.getContext("2d").drawImage(c, x, y, s, s, 0, 0, n, n);
+    f = await F.detectFaces(t);
+    if (f.length) return f.map(face => face.map(p => ({x: (x + p.x * s) / c.width, y: (y + p.y * s) / c.height})));
+  }
+  return [];
+}
+async function visaLive() {
+  if (visaBusy || camState.mode !== "visa" || $("#v-cam").hidden || !$("#iov").hidden || !$("#vres").hidden) return;
+  const v = $("#video"); if (!v.videoWidth) return;
+  visaBusy = true;
+  try {
+    const s = VI.specOf(prefs.visaSpec), k = 640 / Math.max(v.videoWidth, v.videoHeight), c0 = newCanvas(Math.round(v.videoWidth * k), Math.round(v.videoHeight * k));
+    c0.getContext("2d").drawImage(v, 0, 0, c0.width, c0.height);
+    let c = cropToRatio(c0, s.w / s.h);
+    if (camState.digital > 1.01) { const z = camState.digital, w = Math.round(c.width / z), h = Math.round(c.height / z), o = newCanvas(w, h); o.getContext("2d").drawImage(c, (c.width - w) / 2, (c.height - h) / 2, w, h, 0, 0, w, h); c = o; }
+    const faces = await detectAny(c);
+    if (!faces.length) return visaHint("ไม่พบใบหน้า — หันหน้าเข้ากล้อง", "warn");
+    const m = VI.measure(faces[0]), want = VI.headTarget(s) / s.h, top = VI.topMargin(s) / s.h, r = m.head / want;
+    if (faces.length > 1) return visaHint("ต้องมีคนเดียวในภาพ", "warn");
+    if (r < .88) return visaHint("เข้าใกล้กล้องอีกนิด", "warn");
+    if (r > 1.12) return visaHint("ถอยห่างกล้องอีกนิด", "warn");
+    if (Math.abs(m.cx - .5) > .07) return visaHint("ขยับให้ใบหน้าอยู่กลางกรอบ", "warn");
+    if (m.crownY < top - .05) return visaHint("ยกกล้องขึ้น / ขยับศีรษะลงให้ตรงเส้นบน", "warn");
+    if (m.crownY > top + .06) return visaHint("ลดกล้องลง / ขยับศีรษะขึ้นให้ตรงเส้นบน", "warn");
+    if (Math.abs(m.roll) > 4) return visaHint("ตั้งศีรษะให้ตรง ไม่เอียง", "warn");
+    if (Math.abs(m.yaw) > .08) return visaHint("หันหน้าตรงเข้ากล้อง", "warn");
+    visaHint("✓ ตำแหน่งดี — กดถ่ายได้เลย", "ok");
+  } catch (e) {} finally { visaBusy = false; }
+}
+async function visaProcess(full) {
+  const s = VI.specOf(prefs.visaSpec); toast("กำลังจัดรูปตามขนาด…", 1200);
+  try {
+    await F.loadFace();
+    const small = scaled(full, 1400), faces = await detectAny(small);
+    if (!faces.length) return toast("ไม่พบใบหน้าในรูป ลองถ่ายใหม่ให้เห็นหน้าชัด ๆ", 2200);
+    const m = VI.measure(faces[0]), fit = VI.fit(full, m, s), list = VI.checks(fit.canvas, m, s, fit);
+    camState.visaOut = {canvas: fit.canvas, spec: s};
+    $("#vres-title").textContent = `${s.flag} ${s.name}`; $("#vres-size").textContent = `${s.w}×${s.h} มม. · ${fit.canvas.width}×${fit.canvas.height} px · ${s.dpi || 600} dpi`;
+    $("#vres-img").src = fit.canvas.toDataURL("image/jpeg", .9); $("#vres-img").style.aspectRatio = `${s.w}/${s.h}`;
+    const ul = $("#vres-list"); ul.textContent = "";
+    const fails = list.filter(x => x.pass === false).length;
+    ul.appendChild(el("li", "sum " + (fails ? "warn" : "ok"), fails ? `ควรแก้ ${fails} ข้อก่อนใช้จริง` : "ผ่านทุกข้อที่ตรวจได้ ✓"));
+    list.forEach(x => ul.appendChild(el("li", x.pass === null ? "info" : x.pass ? "ok" : "warn", `<b>${x.pass === null ? "ℹ" : x.pass ? "✓" : "!"}</b><span>${x.pass === false && x.hint ? x.hint : x.t}</span>`)));
+    ul.appendChild(el("li", "info", "<b>ℹ</b><span>แอปวัดจากจุดบนใบหน้าโดยประมาณ — ตรวจกฎของประเทศปลายทางอีกครั้งก่อนยื่น</span>"));
+    $("#vres").hidden = false;
+  } catch (e) { toast("จัดรูปไม่สำเร็จ: " + (e && e.message || e)); }
+}
+async function visaSave(kind) {
+  const o = camState.visaOut; if (!o) return;
+  const c = kind === "sheet" ? VI.sheet(o.canvas, o.spec) : o.canvas, dpi = kind === "sheet" ? 300 : (o.spec.dpi || 600);
+  let blob = await new Promise(r => c.toBlob(r, "image/jpeg", .95)); blob = await VI.withDpi(blob, dpi);
+  await saveBlobs([{blob, name: `MoonCam_${o.spec.id}_${o.spec.w}x${o.spec.h}mm${kind === "sheet" ? "_4x6" : ""}_${Date.now()}.jpg`}]);
+}
+$("#vres-save").onclick = () => visaSave("photo");
+$("#vres-sheet").onclick = () => visaSave("sheet");
+$("#vres-retake").onclick = $("#vres-back").onclick = () => { $("#vres").hidden = true; };
+
 // ================================================================== ANALOG MODES (instant camera · film roll)
 const skinOn = () => camState.mode === "instant" || camState.mode === "roll";
 function applySkinLook() {
@@ -480,7 +590,7 @@ function applySkinLook() {
 function setSkin() {
   const root = $("#v-cam"), on = skinOn();
   root.classList.toggle("skin-on", on); root.classList.toggle("skin-instant", camState.mode === "instant"); root.classList.toggle("skin-roll", camState.mode === "roll");
-  $("#skin").hidden = !on; $("#c-skin").hidden = !on; if (!on) $("#skin-ctl").innerHTML = "";
+  $("#skin").hidden = !on; $("#c-skin").hidden = !on && camState.mode !== "visa"; if (!on) $("#skin-ctl").innerHTML = "";
   if (!on) { ["--sk-bg", "--sk-btn", "--sk-ring", "--sk-accent"].forEach(k => root.style.removeProperty(k)); $("#vf").style.borderRadius = ""; return; }
   const v = camState.mode === "instant" ? AN.instantOf(prefs.instantModel).skin : AN.filmOf(prefs.film);
   root.style.setProperty("--sk-bg", v.bg); root.style.setProperty("--sk-btn", v.btn);
@@ -490,6 +600,7 @@ function setSkin() {
 }
 function renderSkinChip() {
   const c = $("#c-skin");
+  if (camState.mode === "visa") { const v = VI.specOf(prefs.visaSpec); c.innerHTML = `${v.flag} ${v.name} · ${v.w}×${v.h}<svg class="i" style="width:14px;height:14px"><path d="m6 9 6 6 6-6"/></svg>`; return; }
   if (camState.mode === "instant") { const m = AN.instantOf(prefs.instantModel); c.innerHTML = `${m.name}<svg class="i" style="width:14px;height:14px"><path d="m6 9 6 6 6-6"/></svg>`; }
   else { const f = AN.filmOf(prefs.film); c.innerHTML = `<span class="fbox" style="background:${f.box}"></span>${f.name} · ${prefs.rollSize}`; }
 }
@@ -593,7 +704,7 @@ function openPackSheet() {
   b.appendChild(button("ใส่แพ็คใหม่ (10 แผ่น)", "big gold", () => { prefs.pack = 10; savePrefs(); renderSkin(); closeSheet(); haptic([10, 60, 10]); toast("ใส่แพ็คใหม่แล้ว · 10 แผ่น"); }));
   openSheet("แพ็คฟิล์มหมด", b);
 }
-$("#c-skin").onclick = () => camState.mode === "instant" ? openModelSheet() : openFilmSheet();
+$("#c-skin").onclick = () => camState.mode === "visa" ? openVisaSheet() : camState.mode === "instant" ? openModelSheet() : openFilmSheet();
 
 // ---------------------------------------------------------------- instant print: eject → develop → done
 const IV = {photo: null, meta: null, settings: null, model: null, p: 0, raf: 0, boost: 0, done: false, saved: false, caption: "", date: true, frame: 0, fmt: "card"};
@@ -1283,9 +1394,10 @@ function makeCube(kind, N = 33) {
   }
   return out;
 }
-const SPECIAL = {digicam: 1, instant: 1, roll: 1};
+const SPECIAL = {digicam: 1, instant: 1, roll: 1, visa: 1};
 function setMode(mode) {
   if (mode === "cinema") return openCinema();
+  if (mode === "more") return openMoreSheet();
   if (mode === camState.mode) return; haptic();
   document.querySelectorAll("#cam-modes button").forEach(x => x.classList.toggle("on", x.dataset.mode === mode));
   const was = camState.mode;
@@ -1294,6 +1406,8 @@ function setMode(mode) {
   camState.mode = mode;
   if (mode === "digicam") { S.body = "ccd"; applyLook(PRESETS.find(l => l.id === "y2k_flash"), {commit: false}); toast("ดิจิคอม — กล้อง CCD ยุค 2000 แฟลชจัด วันที่สีส้ม", 1600); }
   if (mode === "instant" || mode === "roll") { S.body = "none"; applySkinLook(); }
+  if (mode === "visa") { S.body = "none"; S.lens = "natural"; applyLook(allLooks().find(l => l.id === "original"), {commit: false}); }
+  visaMode(mode === "visa");
   if (mode === "instant") toast(`โพลารอยด์ ${AN.instantOf(prefs.instantModel).name} — ถ่ายแล้วรูปค่อย ๆ ออกมา`, 1800);
   if (mode === "roll") toast(`ม้วนฟิล์ม ${AN.filmOf(prefs.film).name} — ถ่ายครบ ${prefs.rollSize} รูปถึงจะล้างดูได้`, 2000);
   if (mode === "pro") toast("โปร — ปรับ ISO · Shutter · Focus · WB · EV ที่แถบด้านล่าง", 1600);
