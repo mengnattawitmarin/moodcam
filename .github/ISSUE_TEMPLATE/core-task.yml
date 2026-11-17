@@ -1,0 +1,26 @@
+name: Core Task (for Claude)
+description: Architecture, logic, API, data or test work owned by Claude
+title: "[Core] "
+labels: ["core"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+    validations:
+      required: true
+  - type: textarea
+    id: approach
+    attributes:
+      label: Approach / constraints
+  - type: textarea
+    id: ui
+    attributes:
+      label: UI follow-up needed?
+      description: If yes, Claude opens a linked UI Task for GPT with the component contract.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+    validations:
+      required: true

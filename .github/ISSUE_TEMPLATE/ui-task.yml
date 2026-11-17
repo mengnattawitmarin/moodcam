@@ -1,0 +1,42 @@
+name: UI / Art Task (for GPT)
+description: UI component, styling or visual asset work assigned to GPT
+title: "[UI] "
+labels: ["ui"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should be built, and why?
+    validations:
+      required: true
+  - type: textarea
+    id: contract
+    attributes:
+      label: Component contract
+      description: Props, states, data shape and events. Claude fills this in.
+      placeholder: |
+        Props: title: string, items: Item[], onSelect(id)
+        States: default, loading, empty, error
+    validations:
+      required: true
+  - type: textarea
+    id: design
+    attributes:
+      label: Design notes
+      description: Reference to docs/DESIGN.md, mood, sketches, links
+  - type: textarea
+    id: assets
+    attributes:
+      label: Assets needed
+      description: Icons, illustrations or images to create (size, format)
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Matches DESIGN.md colours and type
+        - [ ] Responsive on mobile / tablet / desktop
+        - [ ] Screenshots of every state in the PR
+    validations:
+      required: true
